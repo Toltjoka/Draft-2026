@@ -19,13 +19,30 @@
     --silver-dim: #7c8688;
     --black-panel: #0b0c0d;
     --shadow: rgba(0,0,0,.45);
+    --grad1: #103e45;
+    --grad2: #0a2226;
+  }
+  /* Sunderland AFC palette: Red & White stripes, Black */
+  body[data-theme="sunderland"]{
+    --bg: #1a0407;
+    --panel: #2b0a0e;
+    --panel-2: #3d0f15;
+    --line: #6b1a22;
+    --chalk: #ffffff;
+    --chalk-dim: #e0b4b8;
+    --silver: #eb172f;
+    --silver-dim: #a01220;
+    --black-panel: #0d0203;
+    --shadow: rgba(0,0,0,.55);
+    --grad1: #4a0f16;
+    --grad2: #1a0407;
   }
   *{box-sizing:border-box;}
   html,body{margin:0;padding:0;}
   body{
     background:
-      radial-gradient(circle at 12% 0%, #103e45 0%, transparent 45%),
-      radial-gradient(circle at 100% 100%, #0a2226 0%, transparent 50%),
+      radial-gradient(circle at 12% 0%, var(--grad1) 0%, transparent 45%),
+      radial-gradient(circle at 100% 100%, var(--grad2) 0%, transparent 50%),
       var(--bg);
     color:var(--chalk);
     font-family:'Inter',sans-serif;
@@ -77,6 +94,13 @@
   .nav-sep{width:1px; background:var(--line); margin:4px 2px;}
 
   .backup-row{display:flex; gap:10px; justify-content:center; align-items:center; margin-top:14px; flex-wrap:wrap;}
+  .theme-picker-label{
+    display:flex; align-items:center; gap:8px; font-family:'IBM Plex Mono',monospace; font-size:12px; color:var(--chalk-dim);
+  }
+  .theme-picker-label select{
+    font-family:'IBM Plex Mono',monospace; font-size:12px; background:var(--black-panel); color:var(--chalk);
+    border:1px solid var(--line); border-radius:6px; padding:6px 10px;
+  }
   .backup-btn{
     font-family:'IBM Plex Mono',monospace; font-size:11.5px; letter-spacing:.03em; padding:6px 12px;
     border-radius:6px; border:1px solid var(--line); background:var(--black-panel); color:var(--chalk-dim); cursor:pointer;
@@ -378,9 +402,18 @@
 <div class="wrap">
 
   <header class="top">
-    <div class="eyebrow">Två ligor · Snake Draft · Philadelphia Eagles Edition</div>
+    <div class="eyebrow" id="theme-eyebrow">Två ligor · Snake Draft · Philadelphia Eagles Edition</div>
     <h1>DRAFTBOARD</h1>
     <div class="sub">Klicka i en ruta och sök fram spelaren — draftordningen räknas ut automatiskt.</div>
+    <div class="backup-row">
+      <label class="theme-picker-label">
+        🎨 Tema:
+        <select id="theme-picker" data-action="switch-theme">
+          <option value="eagles">Philadelphia Eagles</option>
+          <option value="sunderland">Sunderland AFC</option>
+        </select>
+      </label>
+    </div>
     <div class="backup-row">
       <button class="backup-btn" data-action="export-backup">💾 Exportera backup</button>
       <button class="backup-btn" data-action="import-backup">📂 Importera backup</button>
@@ -1370,6 +1403,9 @@ document.addEventListener('change', (e) => {
   const myTeamSelect = e.target.closest('[data-action="update-myteam"]');
   if(myTeamSelect){ updateMyTeam(myTeamSelect.dataset.league, myTeamSelect.value); return; }
 
+  const themePicker = e.target.closest('[data-action="switch-theme"]');
+  if(themePicker){ switchTheme(themePicker.value); return; }
+
   const slotLabelInput = e.target.closest('[data-action="update-slot-label"]');
   if(slotLabelInput){ updateSlotLabel(slotLabelInput.dataset.league, parseInt(slotLabelInput.dataset.idx,10), slotLabelInput.value); return; }
 
@@ -1491,7 +1527,36 @@ function importBackupFromText(text){
   }
 }
 
+const THEMES = {
+  eagles: { label:'Philadelphia Eagles', eyebrow:'Två ligor · Snake Draft · Philadelphia Eagles Edition' },
+  sunderland: { label:'Sunderland AFC', eyebrow:'Två ligor · Snake Draft · Sunderland AFC Edition' }
+};
+
+function applyTheme(themeId){
+  const theme = THEMES[themeId] ? themeId : 'eagles';
+  document.body.setAttribute('data-theme', theme);
+  const eyebrow = document.getElementById('theme-eyebrow');
+  if(eyebrow) eyebrow.textContent = THEMES[theme].eyebrow;
+  const picker = document.getElementById('theme-picker');
+  if(picker) picker.value = theme;
+}
+
+function loadTheme(){
+  let theme = 'eagles';
+  try{
+    const saved = localStorage.getItem('draft:theme');
+    if(saved && THEMES[saved]) theme = saved;
+  }catch(e){ /* default to eagles */ }
+  applyTheme(theme);
+}
+
+function switchTheme(themeId){
+  applyTheme(themeId);
+  try{ localStorage.setItem('draft:theme', themeId); }catch(e){ /* ignore */ }
+}
+
 async function init(){
+  loadTheme();
   await loadLeague('balla');
   await loadLeague('douche');
   renderLeaguePage('balla');
