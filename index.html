@@ -106,6 +106,9 @@
   .nav-btn:hover{color:var(--chalk);}
   .nav-btn.active{background:var(--silver); color:#0b0c0d;}
   .nav-btn.league-b.active{background:var(--panel-2); color:var(--silver); border-color:var(--silver);}
+  .nav-btn.league-b.in-context{border-color:var(--silver); color:var(--silver);}
+  .nav-btn.league-b.in-context.active{background:var(--silver); color:#0b0c0d;}
+  .nav-btn.league-b.in-context::after{content:'●'; font-size:8px; margin-left:6px; vertical-align:middle;}
   .nav-sep{width:1px; background:var(--line); margin:4px 2px;}
 
   .backup-row{display:flex; gap:10px; justify-content:center; align-items:center; margin-top:14px; flex-wrap:wrap;}
@@ -142,6 +145,12 @@
 
   /* Mitt lag / Alla lag */
   .nav-btn-myteam{font-weight:700;}
+  .league-toggle{display:flex; gap:8px; margin-bottom:16px; flex-wrap:wrap;}
+  .league-toggle-btn{
+    font-family:'IBM Plex Mono',monospace; font-size:12px; letter-spacing:.03em; padding:8px 14px;
+    border-radius:999px; border:1px solid var(--line); background:var(--black-panel); color:var(--chalk-dim); cursor:pointer;
+  }
+  .league-toggle-btn.active{background:var(--silver); color:#0b0c0d; border-color:var(--silver); font-weight:700;}
   .nav-btn-myteam.active{background:var(--panel-2); color:var(--chalk); border-color:var(--silver);}
   .myteam-wrap{display:flex; flex-direction:column; gap:20px;}
   .myteam-card{padding:24px;}
@@ -320,12 +329,6 @@
   .rank-item .ri-left{display:flex; flex-direction:column; gap:2px; min-width:0;}
   .rank-item .ri-name{font-size:13.5px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
   .rank-item .ri-sub{font-family:'IBM Plex Mono',monospace; font-size:10.5px; color:var(--chalk-dim);}
-  .rank-item .ri-right{display:flex; gap:6px; flex-shrink:0; flex-wrap:wrap; justify-content:flex-end;}
-  .taken-pill{
-    font-family:'IBM Plex Mono',monospace; font-size:9.5px; letter-spacing:.02em; padding:3px 7px;
-    border-radius:999px; border:1px solid var(--silver); color:var(--silver); white-space:nowrap;
-  }
-  .taken-pill.filled{background:var(--silver); color:#0b0c0d;}
   .rank-item.taken{opacity:.55;}
   .rank-item.taken .ri-name{text-decoration:line-through; text-decoration-color:var(--silver); text-decoration-thickness:2px;}
   .rank-item.taken .ri-sub{text-decoration:line-through; text-decoration-color:var(--chalk-dim); text-decoration-thickness:1px;}
@@ -474,7 +477,7 @@
       <button class="nav-btn nav-btn-myteam" data-action="switch-page" data-page="MYTEAM">Mitt lag</button>
       <button class="nav-btn" data-action="switch-page" data-page="ALLTEAMS">Alla lag</button>
       <button class="nav-btn" data-action="switch-page" data-page="RULES">Regler</button>
-      <button class="nav-btn" data-action="switch-page" data-page="LEGACY2025">2025</button>
+      <button class="nav-btn" id="nav-legacy2025" data-action="switch-page" data-page="LEGACY2025">2025</button>
     </div>
   </div>
 
@@ -631,6 +634,7 @@ const RANK_PAGES = { QB:'Quarterbacks', RB:'Running backs', WR:'Wide receivers',
 const state = {};        // state[key] = {slots, rounds, picks:{"r-p":"Name (POS-TM)"}}
 const rankSearch = {};   // rankSearch[cat] = 'text'
 let currentPage = 'balla';
+let lastLeagueViewed = 'balla';
 let saveTimer = null;
 let suggestBoxMouseDown = false;
 
@@ -727,8 +731,31 @@ function queueSave(key){
   }, 300);
 }
 
+function updateLegacyTabVisibility(){
+  const btn = document.getElementById('nav-legacy2025');
+  if(!btn) return;
+  const showIt = lastLeagueViewed === 'douche';
+  btn.style.display = showIt ? '' : 'none';
+  return showIt;
+}
+
+function updateLeagueContextHighlight(){
+  document.querySelectorAll('.nav-btn.league-b').forEach(b => {
+    b.classList.toggle('in-context', b.dataset.page === lastLeagueViewed);
+  });
+}
+
 function switchPage(page){
+  if(page === 'balla' || page === 'douche') lastLeagueViewed = page;
+  const legacyAllowed = updateLegacyTabVisibility();
+  if(page === 'LEGACY2025' && !legacyAllowed){
+    // Ballsvenkan kör inte keepers, så 2025-fliken gäller bara Douchebag
+    page = 'douche';
+    lastLeagueViewed = 'douche';
+    updateLegacyTabVisibility();
+  }
   currentPage = page;
+  updateLeagueContextHighlight();
   document.querySelectorAll('.nav-btn').forEach(b=> b.classList.toggle('active', b.dataset.page === page));
   document.querySelectorAll('.page').forEach(s=> s.classList.toggle('active', s.dataset.page === page));
   if(RANK_PAGES[page]) renderRankingPage(page);
@@ -888,18 +915,14 @@ function renderRankingPage(cat){
 
   const itemsHtml = players.map(p => {
     const label = formatPlayerLabel(p);
-    const inBalla = takenBalla.has(label);
-    const inDouche = takenDouche.has(label);
-    const isTaken = inBalla || inDouche;
+    const activeKey = LEAGUES[lastLeagueViewed] ? lastLeagueViewed : 'balla';
+    const takenActive = activeKey === 'balla' ? takenBalla : takenDouche;
+    const isTaken = takenActive.has(label);
     return `
       <div class="rank-item ${posClass(p.pos)}${isTaken?' taken':''}">
         <div class="ri-left">
           <div class="ri-name">${escapeHtml(p.rank)} ${escapeHtml(p.name)} <span style="color:var(--silver-dim); font-weight:400;">(${p.team})</span>${p.rookie?'<span class="rookie-badge">R</span>':''}</div>
           <div class="ri-sub">${p.team} · Bye ${p.bye} · ADP ${p.adp} · ${p.ppg} p/game</div>
-        </div>
-        <div class="ri-right">
-          <span class="taken-pill${inBalla?' filled':''}">${LEAGUES.balla.name}</span>
-          <span class="taken-pill${inDouche?' filled':''}">${LEAGUES.douche.name}</span>
         </div>
       </div>
     `;
@@ -908,7 +931,7 @@ function renderRankingPage(cat){
   el.innerHTML = `
     <div class="card">
       <h2>${label}</h2>
-      <p class="desc">Fullständig 4for4-ranking. Pillerna visar om spelaren redan är draftad i respektive liga.</p>
+      <p class="desc">Fullständig 4for4-ranking. Överstruken spelare = tagen i ${LEAGUES[lastLeagueViewed] ? LEAGUES[lastLeagueViewed].name : LEAGUES.balla.name} (ligan du senast var inne på).</p>
       <input class="rank-search" type="text" placeholder="Sök spelare eller lag…" value="${escapeAttr(search)}" data-action="rank-search" data-cat="${cat}" />
       <div class="rank-count">${players.length} spelare</div>
       <div class="rank-table">${itemsHtml || '<div class="suggest-empty">Inga spelare matchar.</div>'}</div>
@@ -981,7 +1004,14 @@ function renderMyTeamPage(){
   const el = document.getElementById('page-MYTEAM');
   if(!el) return;
 
-  const sections = Object.keys(LEAGUES).map(key => {
+  const activeKey = LEAGUES[lastLeagueViewed] ? lastLeagueViewed : 'balla';
+  const switcherHtml = `
+    <div class="league-toggle">
+      ${Object.keys(LEAGUES).map(k => `<button class="league-toggle-btn${k===activeKey?' active':''}" data-action="myteam-league-toggle" data-league="${k}">${escapeHtml(LEAGUES[k].name)}</button>`).join('')}
+    </div>
+  `;
+
+  const sections = [activeKey].map(key => {
     const cfg = LEAGUES[key];
     const data = state[key];
     if(data.myTeamIdx === null || data.myTeamIdx === undefined){
@@ -1055,14 +1085,21 @@ function renderMyTeamPage(){
     `;
   }).join('');
 
-  el.innerHTML = `<div class="myteam-wrap">${sections}</div>`;
+  el.innerHTML = `${switcherHtml}<div class="myteam-wrap">${sections}</div>`;
 }
 
 function renderAllTeamsPage(){
   const el = document.getElementById('page-ALLTEAMS');
   if(!el) return;
 
-  const sections = Object.keys(LEAGUES).map(key => {
+  const activeKey = LEAGUES[lastLeagueViewed] ? lastLeagueViewed : 'balla';
+  const switcherHtml = `
+    <div class="league-toggle">
+      ${Object.keys(LEAGUES).map(k => `<button class="league-toggle-btn${k===activeKey?' active':''}" data-action="allteams-league-toggle" data-league="${k}">${escapeHtml(LEAGUES[k].name)}</button>`).join('')}
+    </div>
+  `;
+
+  const sections = [activeKey].map(key => {
     const cfg = LEAGUES[key];
     const data = state[key];
     const teamsHtml = data.slots.map((teamName, slotIdx) => {
@@ -1087,7 +1124,7 @@ function renderAllTeamsPage(){
     `;
   }).join('');
 
-  el.innerHTML = sections;
+  el.innerHTML = switcherHtml + sections;
 }
 
 function renderRulesPage(){
@@ -1308,6 +1345,12 @@ function hideSuggestions(){
 document.addEventListener('click', (e) => {
   const navBtn = e.target.closest('[data-action="switch-page"]');
   if(navBtn){ switchPage(navBtn.dataset.page); return; }
+
+  const myteamToggle = e.target.closest('[data-action="myteam-league-toggle"]');
+  if(myteamToggle){ lastLeagueViewed = myteamToggle.dataset.league; updateLegacyTabVisibility(); updateLeagueContextHighlight(); renderMyTeamPage(); return; }
+
+  const allteamsToggle = e.target.closest('[data-action="allteams-league-toggle"]');
+  if(allteamsToggle){ lastLeagueViewed = allteamsToggle.dataset.league; updateLegacyTabVisibility(); updateLeagueContextHighlight(); renderAllTeamsPage(); return; }
 
   const resetBtn = e.target.closest('[data-action="reset-league"]');
   if(resetBtn){ resetLeague(resetBtn.dataset.league); return; }
@@ -1574,6 +1617,8 @@ function switchTheme(themeId){
 
 async function init(){
   loadTheme();
+  updateLegacyTabVisibility();
+  updateLeagueContextHighlight();
   await loadLeague('balla');
   await loadLeague('douche');
   renderLeaguePage('balla');
