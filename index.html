@@ -358,6 +358,23 @@
   .rules-actions{display:flex; align-items:center; gap:12px; flex-wrap:wrap;}
   .rules-bench-info{font-family:'IBM Plex Mono',monospace; font-size:11.5px; color:var(--chalk-dim);}
 
+  /* 2025 / Keepers */
+  .legacy-grid{display:grid; grid-template-columns:repeat(auto-fill, minmax(240px, 1fr)); gap:14px; margin-top:14px;}
+  .legacy-card{padding:16px;}
+  .legacy-team-name{font-family:'Bebas Neue',sans-serif; font-size:24px; letter-spacing:.02em; color:var(--chalk); margin-bottom:6px;}
+  .legacy-hint{font-size:11.5px; color:var(--chalk-dim); line-height:1.4; margin:0 0 12px;}
+  .keeper-fields{display:flex; flex-direction:column; gap:10px;}
+  .keeper-field-label{font-family:'IBM Plex Mono',monospace; font-size:10.5px; letter-spacing:.04em; text-transform:uppercase; color:var(--chalk-dim); display:flex; align-items:center; gap:6px; margin-bottom:4px;}
+  .keeper-input{
+    width:100%; font-family:'IBM Plex Mono',monospace; font-size:13px; background:var(--bg); color:var(--chalk);
+    border:1px solid var(--line); border-radius:6px; padding:8px 10px;
+  }
+  .keeper-input:focus{border-color:var(--silver); outline:none;}
+  .keeper-tag{
+    font-family:'IBM Plex Mono',monospace; font-size:9.5px; font-weight:700; letter-spacing:.04em;
+    background:var(--silver); color:#0b0c0d; padding:2px 6px; border-radius:4px;
+  }
+
   footer{text-align:center; font-size:11px; color:var(--chalk-dim); margin-top:24px; font-family:'IBM Plex Mono',monospace;}
 </style>
 </head>
@@ -412,6 +429,7 @@
       <button class="nav-btn nav-btn-myteam" data-action="switch-page" data-page="MYTEAM">Mitt lag</button>
       <button class="nav-btn" data-action="switch-page" data-page="ALLTEAMS">Alla lag</button>
       <button class="nav-btn" data-action="switch-page" data-page="RULES">Regler</button>
+      <button class="nav-btn" data-action="switch-page" data-page="LEGACY2025">2025</button>
     </div>
   </div>
 
@@ -427,6 +445,8 @@
   <section class="page" data-page="MYTEAM" id="page-MYTEAM"></section>
   <section class="page" data-page="ALLTEAMS" id="page-ALLTEAMS"></section>
   <section class="page" data-page="RULES" id="page-RULES"></section>
+  <section class="page" data-page="LEGACY2025" id="page-LEGACY2025"></section>
+  <datalist id="all-players-datalist"></datalist>
 
   <div id="global-suggest"></div>
 
@@ -477,7 +497,8 @@ const LEAGUES = {
     order:(round, idx, n) => {
       if (round <= 2) return idx+1;
       return (round % 2 === 1) ? n-idx : idx+1;
-    }
+    },
+    defaultSlotNames: ['Toltjoka','Lag 2','Lag 3','Lag 4','Lag 5','Lag 6','Lag 7','Lag 8']
   }
 };
 const POS_OPTIONS = ['QB','RB','WR','TE','K','DST'];
@@ -504,10 +525,12 @@ async function loadLeague(key){
     if(raw) data = JSON.parse(raw);
   }catch(e){ /* nothing saved yet, use defaults */ }
   if(!data){
-    data = { slots: Array.from({length:cfg.n}, (_,i)=> 'Lag ' + (i+1)), rounds: cfg.defaultRounds, picks: {}, pickHistory: [], rosterSlots: defaultRosterSlots() };
+    const slotNames = cfg.defaultSlotNames || Array.from({length:cfg.n}, (_,i)=> 'Lag ' + (i+1));
+    data = { slots: slotNames.slice(), rounds: cfg.defaultRounds, picks: {}, pickHistory: [], rosterSlots: defaultRosterSlots(), keepers: Array.from({length:cfg.n}, ()=> ['','']) };
   }
   if(!data.pickHistory) data.pickHistory = [];
   if(!data.rosterSlots) data.rosterSlots = defaultRosterSlots();
+  if(!data.keepers) data.keepers = Array.from({length:cfg.n}, ()=> ['','']);
   state[key] = data;
 }
 
@@ -535,6 +558,7 @@ function switchPage(page){
   if(page === 'MYTEAM') renderMyTeamPage();
   if(page === 'ALLTEAMS') renderAllTeamsPage();
   if(page === 'RULES') renderRulesPage();
+  if(page === 'LEGACY2025') renderLegacyPage();
 }
 
 function getRoundDirection(cfg, round){ return cfg.order(round, 0, cfg.n) === 1 ? 'asc' : 'desc'; }
@@ -674,7 +698,7 @@ function renderRankingPage(cat){
   }
 
   const takenBalla = new Set(Object.values(state.balla.picks).filter(Boolean));
-  const takenDouche = new Set(Object.values(state.douche.picks).filter(Boolean));
+  const takenDouche = new Set([...Object.values(state.douche.picks).filter(Boolean), ...getDoucheKeeperLabels()]);
 
   const itemsHtml = players.map(p => {
     const label = formatPlayerLabel(p);
@@ -717,6 +741,11 @@ function getRosterForSlot(key, slotIdx){
   const cfg = LEAGUES[key];
   const data = state[key];
   const picks = [];
+  if(key === 'douche' && data.keepers && data.keepers[slotIdx]){
+    data.keepers[slotIdx].forEach((label, i) => {
+      if(label) picks.push({ round: 'K', overallPick: 'Keeper ' + (i+1), label, isKeeper: true });
+    });
+  }
   for(let r=1; r<=data.rounds; r++){
     for(let i=0; i<cfg.n; i++){
       if(cfg.order(r, i, cfg.n) - 1 === slotIdx){
@@ -825,7 +854,7 @@ function renderMyTeamPage(){
       const filled = !!p.label;
       return `
         <div class="myteam-row${filled?'':' empty'}">
-          <div class="myteam-round">R${p.round} <span class="myteam-overall">#${p.overallPick}</span></div>
+          <div class="myteam-round">${p.isKeeper ? `<span class="keeper-tag">KEEPER</span>` : `R${p.round} <span class="myteam-overall">#${p.overallPick}</span>`}</div>
           <div class="myteam-player">
             ${filled ? `<span class="myteam-name">${escapeHtml(parsed.name)}</span> <span class="myteam-pos pos-badge ${posClass(parsed.pos)}">${escapeHtml(parsed.pos)}</span> <span class="myteam-team">${escapeHtml(parsed.team)}</span>` : '<span class="myteam-name empty-slot">— inte draftad än —</span>'}
           </div>
@@ -860,7 +889,7 @@ function renderAllTeamsPage(){
       const isMe = data.myTeamIdx === slotIdx;
       const picksHtml = roster.filter(p => p.label).map(p => {
         const parsed = parsePlayerLabel(p.label);
-        return `<div class="allteams-pick"><span class="allteams-round">R${p.round}</span> ${escapeHtml(parsed.name)} <span class="allteams-pos pos-badge ${posClass(parsed.pos)}">${escapeHtml(parsed.pos)}</span></div>`;
+        return `<div class="allteams-pick"><span class="allteams-round">${p.isKeeper ? 'K' : 'R'+p.round}</span> ${escapeHtml(parsed.name)} <span class="allteams-pos pos-badge ${posClass(parsed.pos)}">${escapeHtml(parsed.pos)}</span></div>`;
       }).join('') || '<div class="allteams-pick empty">Inga val än</div>';
       return `
         <div class="allteams-team${isMe?' is-me':''}">
@@ -922,6 +951,68 @@ function renderRulesPage(){
   }).join('');
 
   el.innerHTML = sections;
+}
+
+function populatePlayerDatalist(){
+  const dl = document.getElementById('all-players-datalist');
+  if(!dl) return;
+  dl.innerHTML = PLAYERS.map(p => `<option value="${escapeAttr(formatPlayerLabel(p))}"></option>`).join('');
+}
+
+function getDoucheKeeperLabels(){
+  const data = state.douche;
+  const set = new Set();
+  (data.keepers || []).forEach(pair => (pair||[]).forEach(v => { if(v) set.add(v); }));
+  return set;
+}
+
+function renderLegacyPage(){
+  const el = document.getElementById('page-LEGACY2025');
+  if(!el) return;
+  const data = state.douche;
+  const cfg = LEAGUES.douche;
+
+  const cardsHtml = data.slots.map((teamName, idx) => {
+    const pair = data.keepers[idx] || ['',''];
+    const keeperInputs = [0,1].map(i => {
+      const val = pair[i] || '';
+      const parsed = val ? parsePlayerLabel(val) : null;
+      return `
+        <div class="keeper-field">
+          <label class="keeper-field-label">Keeper ${i+1}${parsed ? ` <span class="pos-badge ${posClass(parsed.pos)}">${escapeHtml(parsed.pos)}</span>` : ''}</label>
+          <input type="text" list="all-players-datalist" class="keeper-input" placeholder="Sök spelarnamn…"
+            value="${escapeAttr(val)}" data-action="update-keeper" data-idx="${idx}" data-slot="${i}" />
+        </div>
+      `;
+    }).join('');
+    return `
+      <div class="card legacy-card">
+        <div class="legacy-team-name">${escapeHtml(teamName)}</div>
+        <p class="legacy-hint">Lagnamn redigeras på Douchebag-fliken. Välj de två spelare laget behåller in i 2026 års draft — de markeras automatiskt som tagna och dyker upp på "Mitt lag"/"Alla lag".</p>
+        <div class="keeper-fields">${keeperInputs}</div>
+      </div>
+    `;
+  }).join('');
+
+  el.innerHTML = `
+    <div class="card">
+      <h2>${cfg.name} — 2025 & Keepers</h2>
+      <p class="desc">Förra årets lag i Douchebag. Ni kör keepers: varje lag väljer två spelare från förra säsongen att behålla in i 2026 års draft. Sök fram spelarna nedan (samma spelarpool som draften).</p>
+    </div>
+    <div class="legacy-grid">${cardsHtml}</div>
+  `;
+}
+
+function updateKeeper(slotIdx, keeperSlot, value){
+  if(!state.douche.keepers) state.douche.keepers = Array.from({length:LEAGUES.douche.n}, ()=> ['','']);
+  if(!state.douche.keepers[slotIdx]) state.douche.keepers[slotIdx] = ['',''];
+  // Match against known players so free text still resolves to a valid label; store raw text if no exact match yet.
+  const match = PLAYERS.find(p => formatPlayerLabel(p) === value);
+  state.douche.keepers[slotIdx][keeperSlot] = match ? formatPlayerLabel(match) : value;
+  renderLegacyPage();
+  renderLeaguePage('douche');
+  Object.keys(RANK_PAGES).forEach(renderRankingPage);
+  queueSave('douche');
 }
 
 function addRosterSlot(key){
@@ -1005,10 +1096,12 @@ function updateMyTeam(key, value){
 }
 
 function resetLeague(key){
-  if(!confirm('Rensa alla spelarval och lagnamn för ' + LEAGUES[key].name + '? (Regler/rosterkrav påverkas inte)')) return;
+  if(!confirm('Rensa alla spelarval och lagnamn för ' + LEAGUES[key].name + '? (Regler, keepers och 2025-data påverkas inte)')) return;
   const cfg = LEAGUES[key];
   const keepRosterSlots = state[key] && state[key].rosterSlots ? state[key].rosterSlots : defaultRosterSlots();
-  state[key] = { slots: Array.from({length:cfg.n}, (_,i)=> 'Lag ' + (i+1)), rounds: cfg.defaultRounds, picks: {}, pickHistory: [], rosterSlots: keepRosterSlots };
+  const keepKeepers = state[key] && state[key].keepers ? state[key].keepers : Array.from({length:cfg.n}, ()=> ['','']);
+  const slotNames = cfg.defaultSlotNames || Array.from({length:cfg.n}, (_,i)=> 'Lag ' + (i+1));
+  state[key] = { slots: slotNames.slice(), rounds: cfg.defaultRounds, picks: {}, pickHistory: [], rosterSlots: keepRosterSlots, keepers: keepKeepers };
   renderLeaguePage(key);
   queueSave(key);
 }
@@ -1029,6 +1122,7 @@ function showSuggestions(input){
   const box = document.getElementById('global-suggest');
   const query = input.value.trim().toLowerCase();
   const taken = new Set(Object.values(state[key].picks).filter(Boolean));
+  if(key === 'douche') getDoucheKeeperLabels().forEach(v => taken.add(v));
 
   let matches = PLAYERS.filter(p => !taken.has(formatPlayerLabel(p)));
   if(query) matches = matches.filter(p => p.name.toLowerCase().includes(query) || p.team.toLowerCase().includes(query));
@@ -1159,6 +1253,9 @@ document.addEventListener('change', (e) => {
   const posCheck = e.target.closest('[data-action="toggle-slot-pos"]');
   if(posCheck){ toggleSlotPos(posCheck.dataset.league, parseInt(posCheck.dataset.idx,10), posCheck.dataset.pos, posCheck.checked); return; }
 
+  const keeperInput = e.target.closest('[data-action="update-keeper"]');
+  if(keeperInput){ updateKeeper(parseInt(keeperInput.dataset.idx,10), parseInt(keeperInput.dataset.slot,10), keeperInput.value); return; }
+
   if(e.target.id === 'import-file-input'){ importBackup(e.target.files[0]); e.target.value = ''; return; }
 });
 
@@ -1236,10 +1333,11 @@ async function copyBackupText(){
 
 function applyBackupData(data, status){
   if(data.balla){ state.balla = data.balla; if(!state.balla.pickHistory) state.balla.pickHistory = []; if(!state.balla.rosterSlots) state.balla.rosterSlots = defaultRosterSlots(); }
-  if(data.douche){ state.douche = data.douche; if(!state.douche.pickHistory) state.douche.pickHistory = []; if(!state.douche.rosterSlots) state.douche.rosterSlots = defaultRosterSlots(); }
+  if(data.douche){ state.douche = data.douche; if(!state.douche.pickHistory) state.douche.pickHistory = []; if(!state.douche.rosterSlots) state.douche.rosterSlots = defaultRosterSlots(); if(!state.douche.keepers) state.douche.keepers = Array.from({length:LEAGUES.douche.n}, ()=> ['','']); }
   renderLeaguePage('balla');
   renderLeaguePage('douche');
   Object.keys(RANK_PAGES).forEach(renderRankingPage);
+  renderLegacyPage();
   queueSave('balla');
   queueSave('douche');
   hideBackupModal();
@@ -1279,6 +1377,7 @@ async function init(){
   renderLeaguePage('balla');
   renderLeaguePage('douche');
   Object.keys(RANK_PAGES).forEach(renderRankingPage);
+  populatePlayerDatalist();
 }
 init().catch(showBootError);
 
