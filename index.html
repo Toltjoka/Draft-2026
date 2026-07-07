@@ -37,6 +37,21 @@
     --grad1: #4a0f16;
     --grad2: #1a0407;
   }
+  /* LA Chargers palette: Powder Blue, Navy, Gold */
+  body[data-theme="chargers"]{
+    --bg: #001233;
+    --panel: #041c42;
+    --panel-2: #0a2a5e;
+    --line: #1c4f8a;
+    --chalk: #ffffff;
+    --chalk-dim: #a8c5e8;
+    --silver: #ffc20e;
+    --silver-dim: #cc9b0b;
+    --black-panel: #00091a;
+    --shadow: rgba(0,0,0,.5);
+    --grad1: #0a2a5e;
+    --grad2: #001233;
+  }
   *{box-sizing:border-box;}
   html,body{margin:0;padding:0;}
   body{
@@ -411,6 +426,7 @@
         <select id="theme-picker" data-action="switch-theme">
           <option value="eagles">Philadelphia Eagles</option>
           <option value="sunderland">Sunderland AFC</option>
+          <option value="chargers">LA Chargers</option>
         </select>
       </label>
     </div>
@@ -1529,7 +1545,8 @@ function importBackupFromText(text){
 
 const THEMES = {
   eagles: { label:'Philadelphia Eagles', eyebrow:'Två ligor · Snake Draft · Philadelphia Eagles Edition' },
-  sunderland: { label:'Sunderland AFC', eyebrow:'Två ligor · Snake Draft · Sunderland AFC Edition' }
+  sunderland: { label:'Sunderland AFC', eyebrow:'Två ligor · Snake Draft · Sunderland AFC Edition' },
+  chargers: { label:'LA Chargers', eyebrow:'Två ligor · Snake Draft · LA Chargers Edition' }
 };
 
 function applyTheme(themeId){
