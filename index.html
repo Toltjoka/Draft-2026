@@ -1,0 +1,1290 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Draftboard — Snake Draft</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap');
+
+  /* Philadelphia Eagles palette: Midnight Green, Silver, Black, White */
+  :root{
+    --bg: #04181b;
+    --panel: #0a2b30;
+    --panel-2: #0f3a41;
+    --line: #1e535c;
+    --chalk: #f5f6f6;
+    --chalk-dim: #9fb2b5;
+    --silver: #a7afb3;
+    --silver-dim: #7c8688;
+    --black-panel: #0b0c0d;
+    --shadow: rgba(0,0,0,.45);
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:
+      radial-gradient(circle at 12% 0%, #103e45 0%, transparent 45%),
+      radial-gradient(circle at 100% 100%, #0a2226 0%, transparent 50%),
+      var(--bg);
+    color:var(--chalk);
+    font-family:'Inter',sans-serif;
+    min-height:100vh;
+    padding:20px 14px 60px;
+  }
+
+  .wrap{max-width:1200px;margin:0 auto;}
+
+  header.top{text-align:center; margin-bottom:18px;}
+  .eyebrow{
+    font-family:'IBM Plex Mono',monospace;
+    letter-spacing:.28em;
+    text-transform:uppercase;
+    font-size:11px;
+    color:var(--chalk-dim);
+    margin-bottom:6px;
+  }
+  h1{
+    font-family:'Bebas Neue',sans-serif;
+    font-size:clamp(38px,9vw,58px);
+    letter-spacing:.03em;
+    margin:0;
+    line-height:.95;
+    background:linear-gradient(180deg,#ffffff, var(--silver) 75%);
+    -webkit-background-clip:text;
+    background-clip:text;
+    color:transparent;
+  }
+  .sub{font-size:13px; color:var(--chalk-dim); margin-top:8px;}
+
+  #boot-error{
+    display:none; max-width:900px; margin:0 auto 18px; background:#3a1414; border:1px solid #7a2b2b;
+    color:#ffd7d0; border-radius:12px; padding:14px 16px; font-family:'IBM Plex Mono',monospace;
+    font-size:12px; white-space:pre-wrap; word-break:break-word;
+  }
+  #boot-error strong{display:block; margin-bottom:6px; font-size:13px;}
+
+  /* Top-level nav: leagues + ranking pages, all in one tab row */
+  .nav{display:flex; gap:8px; justify-content:center; margin-bottom:22px; flex-wrap:wrap;}
+  .nav-group{display:flex; gap:6px; padding:4px; background:var(--black-panel); border:1px solid var(--line); border-radius:999px;}
+  .nav-btn{
+    font-family:'Bebas Neue',sans-serif; font-size:17px; letter-spacing:.03em; padding:8px 18px;
+    border-radius:999px; border:1px solid transparent; background:transparent; color:var(--chalk-dim); cursor:pointer;
+  }
+  .nav-btn:hover{color:var(--chalk);}
+  .nav-btn.active{background:var(--silver); color:#0b0c0d;}
+  .nav-btn.league-b.active{background:var(--panel-2); color:var(--silver); border-color:var(--silver);}
+  .nav-sep{width:1px; background:var(--line); margin:4px 2px;}
+
+  .backup-row{display:flex; gap:10px; justify-content:center; align-items:center; margin-top:14px; flex-wrap:wrap;}
+  .backup-btn{
+    font-family:'IBM Plex Mono',monospace; font-size:11.5px; letter-spacing:.03em; padding:6px 12px;
+    border-radius:6px; border:1px solid var(--line); background:var(--black-panel); color:var(--chalk-dim); cursor:pointer;
+  }
+  .backup-btn:hover{color:var(--chalk); border-color:var(--silver);}
+  .backup-status{font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--silver);}
+
+  .backup-modal-overlay{
+    display:none; position:fixed; inset:0; background:rgba(0,0,0,.75); z-index:200;
+    align-items:center; justify-content:center; padding:20px;
+  }
+  .backup-modal-overlay.show{display:flex;}
+  .backup-modal{
+    background:var(--black-panel); border:1px solid var(--silver); border-radius:10px;
+    max-width:560px; width:100%; padding:18px; max-height:80vh; display:flex; flex-direction:column; gap:12px;
+  }
+  .backup-modal-head{display:flex; justify-content:space-between; align-items:center; font-family:'IBM Plex Mono',monospace; font-size:12.5px; color:var(--chalk);}
+  .backup-modal-hint{font-size:12px; color:var(--chalk-dim); line-height:1.5; margin:0;}
+  .backup-modal-textarea{
+    width:100%; min-height:220px; flex:1; background:#000; color:var(--chalk); border:1px solid var(--line);
+    border-radius:6px; padding:10px; font-family:'IBM Plex Mono',monospace; font-size:11px; resize:vertical;
+  }
+  .backup-modal-actions{display:flex; align-items:center; gap:10px;}
+
+  /* Mitt lag / Alla lag */
+  .nav-btn-myteam{font-weight:700;}
+  .nav-btn-myteam.active{background:var(--panel-2); color:var(--chalk); border-color:var(--silver);}
+  .myteam-wrap{display:flex; flex-direction:column; gap:20px;}
+  .myteam-card{padding:24px;}
+  .myteam-head{margin-bottom:16px;}
+  .myteam-title{font-size:44px; margin:2px 0 0;}
+  .myteam-list{display:flex; flex-direction:column; gap:8px;}
+  .myteam-row{
+    display:flex; align-items:center; gap:16px; padding:12px 16px; border:1px solid var(--line);
+    border-radius:8px; background:var(--bg);
+  }
+  .myteam-row.empty{opacity:.45;}
+  .myteam-round{font-family:'IBM Plex Mono',monospace; font-size:12px; color:var(--chalk-dim); min-width:70px;}
+  .myteam-overall{color:var(--silver);}
+  .myteam-player{font-size:19px;}
+  .myteam-name{font-weight:600;}
+  .myteam-name.empty-slot{font-weight:400; font-style:italic; color:var(--chalk-dim); font-size:15px;}
+  .myteam-pos{font-family:'IBM Plex Mono',monospace; font-size:12px; color:var(--panel-2); background:var(--silver); padding:2px 6px; border-radius:4px; margin-left:6px;}
+  .myteam-team{font-family:'IBM Plex Mono',monospace; font-size:13px; color:var(--chalk-dim); margin-left:6px;}
+
+  .allteams-grid{display:grid; grid-template-columns:repeat(auto-fill, minmax(180px, 1fr)); gap:10px;}
+  .allteams-team{border:1px solid var(--line); border-radius:8px; padding:10px; background:var(--bg);}
+  .allteams-team.is-me{border-color:var(--silver); background:var(--panel-2);}
+  .allteams-team-name{font-family:'IBM Plex Mono',monospace; font-size:11.5px; font-weight:700; margin-bottom:6px; display:flex; align-items:center; gap:6px;}
+  .me-badge{font-size:9px; background:var(--silver); color:#0b0c0d; padding:1px 5px; border-radius:999px;}
+  .allteams-picks{display:flex; flex-direction:column; gap:2px;}
+  .allteams-pick{font-size:11px; color:var(--chalk-dim);}
+  .allteams-pick.empty{font-style:italic;}
+  .allteams-round{font-family:'IBM Plex Mono',monospace; color:var(--silver); margin-right:3px;}
+  .allteams-pos{font-family:'IBM Plex Mono',monospace; font-size:9.5px; color:var(--silver);}
+
+  /* Starting lineup preview */
+  .lineup-preview{margin-bottom:8px;}
+  .lineup-preview-title{font-family:'Bebas Neue',sans-serif; font-size:20px; letter-spacing:.03em; color:var(--silver); margin-bottom:10px;}
+  .lineup-slots-grid{display:grid; grid-template-columns:repeat(auto-fill, minmax(150px, 1fr)); gap:8px; margin-bottom:14px;}
+  .lineup-slot{
+    border:1px solid var(--line); border-radius:8px; padding:10px; background:var(--bg);
+  }
+  .lineup-slot.filled{border-color:var(--silver); background:var(--panel-2);}
+  .lineup-slot.empty{opacity:.5;}
+  .lineup-slot-label{font-family:'IBM Plex Mono',monospace; font-size:10.5px; letter-spacing:.05em; text-transform:uppercase; color:var(--chalk-dim); margin-bottom:4px;}
+  .lineup-slot-player{font-size:15px; font-weight:600;}
+  .lineup-slot-player.empty-slot{font-weight:400; font-style:italic; font-size:13px; color:var(--chalk-dim);}
+  .lineup-slot-team{font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--chalk-dim); font-weight:400;}
+  .lineup-bench-title{font-family:'IBM Plex Mono',monospace; font-size:12px; letter-spacing:.04em; text-transform:uppercase; color:var(--chalk-dim); margin-bottom:8px;}
+  .lineup-bench-grid{display:grid; grid-template-columns:repeat(auto-fill, minmax(150px, 1fr)); gap:6px;}
+  .lineup-bench-item{
+    border:1px solid var(--line); border-radius:6px; padding:7px 10px; background:var(--bg); font-size:13px;
+  }
+  .lineup-bench-item.empty-slot{font-style:italic; color:var(--chalk-dim);}
+
+  .page{display:none;}
+  .page.active{display:block; animation:fade .2s ease;}
+  @keyframes fade{from{opacity:0; transform:translateY(4px);} to{opacity:1; transform:none;}}
+
+  .card{
+    background:var(--panel); border:1px solid var(--line); border-radius:16px;
+    padding:18px 18px 20px; margin-bottom:18px; box-shadow:0 10px 30px var(--shadow);
+  }
+  .card h2{font-family:'Bebas Neue',sans-serif; font-size:22px; letter-spacing:.03em; margin:0 0 4px; color:var(--silver);}
+  .card p.desc{font-size:12.5px; color:var(--chalk-dim); margin:0 0 14px; line-height:1.5;}
+
+  .slots-grid{display:grid; grid-template-columns:repeat(auto-fit, minmax(96px,1fr)); gap:8px;}
+  .slot-field label{
+    display:block; font-family:'IBM Plex Mono',monospace; font-size:10px;
+    color:var(--chalk-dim); margin-bottom:4px; letter-spacing:.05em;
+  }
+  .slot-field input{
+    width:100%; background:var(--panel-2); border:1px solid var(--line); border-radius:8px;
+    padding:8px 9px; color:var(--chalk); font-family:'Inter',sans-serif; font-weight:600; font-size:13px;
+  }
+  .slot-field input:focus{outline:2px solid var(--silver); outline-offset:1px;}
+
+  .controls-row{
+    display:flex; align-items:center; justify-content:space-between; gap:14px;
+    margin:14px 0 4px; flex-wrap:wrap;
+  }
+  .rounds-control{display:flex; align-items:center; gap:8px; font-family:'IBM Plex Mono',monospace; font-size:12px; color:var(--chalk-dim);}
+  .rounds-control input{
+    width:52px; text-align:center; background:var(--panel-2); border:1px solid var(--line);
+    border-radius:6px; color:var(--chalk); padding:6px 4px; font-family:'IBM Plex Mono',monospace; font-weight:600;
+  }
+  .btn{
+    font-family:'IBM Plex Mono',monospace; font-size:11px; letter-spacing:.04em; text-transform:uppercase;
+    background:transparent; border:1px solid var(--line); color:var(--chalk-dim);
+    padding:7px 12px; border-radius:8px; cursor:pointer;
+  }
+  .btn:hover{color:#fff; border-color:var(--silver);}
+  .btn:disabled{opacity:.35; cursor:not-allowed;}
+  .btn:disabled:hover{color:var(--chalk-dim); border-color:var(--line);}
+  .save-indicator{font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--silver); opacity:0; transition:opacity .3s ease;}
+  .save-indicator.show{opacity:1;}
+
+  .clock-banner{
+    display:flex; align-items:center; justify-content:space-between; gap:12px;
+    background:linear-gradient(90deg, var(--panel-2), var(--panel));
+    border:1px solid var(--line); border-radius:12px; padding:12px 16px; margin-bottom:16px; flex-wrap:wrap;
+  }
+  .clock-left{display:flex; align-items:center; gap:12px;}
+  .clock-pulse{
+    width:10px; height:10px; border-radius:50%; background:var(--silver);
+    box-shadow:0 0 0 0 rgba(167,175,179,.6); animation:pulse 1.6s infinite;
+  }
+  @keyframes pulse{
+    0%{box-shadow:0 0 0 0 rgba(167,175,179,.55);}
+    70%{box-shadow:0 0 0 9px rgba(167,175,179,0);}
+    100%{box-shadow:0 0 0 0 rgba(167,175,179,0);}
+  }
+  .clock-label{font-family:'IBM Plex Mono',monospace; font-size:10px; color:var(--chalk-dim); letter-spacing:.08em; text-transform:uppercase;}
+  .clock-team{font-family:'Bebas Neue',sans-serif; font-size:26px; letter-spacing:.02em; color:var(--silver);}
+  .clock-meta{font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--chalk-dim);}
+  .clock-done{font-family:'Bebas Neue',sans-serif; font-size:22px; color:var(--silver);}
+
+  .table-scroll{overflow-x:auto; border-radius:12px; border:1px solid var(--line);}
+  table.board{border-collapse:separate; border-spacing:0; width:100%; min-width:max-content;}
+  table.board th, table.board td{border-bottom:1px solid var(--line); border-right:1px solid var(--line);}
+  table.board th:last-child, table.board td:last-child{border-right:none;}
+
+  thead th{
+    background:var(--black-panel); font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--chalk-dim);
+    letter-spacing:.05em; padding:9px 6px; text-align:center; position:sticky; top:0; z-index:2;
+  }
+  thead th.corner{position:sticky; left:0; z-index:3; background:var(--black-panel);}
+  tbody th.round-head{
+    position:sticky; left:0; background:var(--panel); z-index:1; padding:8px 10px; text-align:left; min-width:74px;
+  }
+  .round-num{font-family:'Bebas Neue',sans-serif; font-size:20px; letter-spacing:.02em; display:block; line-height:1; color:var(--silver);}
+  .round-dir{font-family:'IBM Plex Mono',monospace; font-size:10px; color:var(--chalk-dim); display:block; margin-top:2px;}
+
+  td.pick-cell{padding:6px; min-width:150px; vertical-align:top; background:var(--bg);}
+  tbody tr:nth-child(even) td.pick-cell{background:#031517;}
+  td.pick-cell.current{outline:2px solid var(--silver); outline-offset:-2px;}
+  .cell-inner{background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:6px 7px 7px;}
+  .cell-top{display:flex; justify-content:space-between; align-items:baseline; margin-bottom:5px;}
+  .team-name{
+    font-weight:700; font-size:12.5px; color:var(--silver);
+    overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:110px;
+  }
+  .pick-num{font-family:'IBM Plex Mono',monospace; font-size:10px; color:var(--chalk-dim);}
+  .cell-inner input.player-search{
+    width:100%; background:var(--panel-2); border:1px solid var(--line); border-radius:6px;
+    padding:6px 7px; color:var(--chalk); font-size:12.5px; font-family:'Inter',sans-serif;
+  }
+  .cell-inner input.player-search:focus{outline:2px solid var(--silver); outline-offset:1px;}
+  .cell-inner input.player-search::placeholder{color:#5b6b6d;}
+
+  /* Shared suggestion dropdown, positioned absolutely under whichever input is active */
+  #global-suggest{
+    position:absolute; display:none; z-index:50; background:var(--black-panel);
+    border:1px solid var(--silver); border-radius:10px; padding:6px; box-shadow:0 12px 28px var(--shadow);
+    max-height:280px; overflow-y:auto;
+  }
+  .suggest-row{
+    display:flex; justify-content:space-between; gap:10px; align-items:center;
+    padding:7px 9px; border-radius:6px; cursor:pointer; font-size:12.5px;
+  }
+  .suggest-row:hover{background:var(--panel-2);}
+  .suggest-meta{font-family:'IBM Plex Mono',monospace; font-size:10px; color:var(--chalk-dim); white-space:nowrap;}
+  .suggest-empty{padding:10px; font-size:12px; color:var(--chalk-dim); text-align:center;}
+  .rookie-badge{
+    font-family:'IBM Plex Mono',monospace; font-size:8.5px; letter-spacing:.03em;
+    background:var(--silver); color:#0b0c0d; border-radius:4px; padding:1px 4px; margin-left:4px;
+  }
+
+  /* Ranking pages */
+  .rank-search{
+    width:100%; background:var(--panel-2); border:1px solid var(--line); border-radius:8px;
+    padding:9px 11px; color:var(--chalk); font-size:13px; margin-bottom:12px;
+  }
+  .rank-count{font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--chalk-dim); margin-bottom:10px;}
+  .rank-table{display:flex; flex-direction:column; gap:5px; max-height:70vh; overflow-y:auto;}
+  .rank-item{
+    display:flex; align-items:center; justify-content:space-between; gap:10px;
+    background:var(--panel-2); border:1px solid var(--line); border-radius:8px; padding:9px 11px;
+    border-left:4px solid var(--line);
+  }
+  .rank-item .ri-left{display:flex; flex-direction:column; gap:2px; min-width:0;}
+  .rank-item .ri-name{font-size:13.5px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+  .rank-item .ri-sub{font-family:'IBM Plex Mono',monospace; font-size:10.5px; color:var(--chalk-dim);}
+  .rank-item .ri-right{display:flex; gap:6px; flex-shrink:0; flex-wrap:wrap; justify-content:flex-end;}
+  .taken-pill{
+    font-family:'IBM Plex Mono',monospace; font-size:9.5px; letter-spacing:.02em; padding:3px 7px;
+    border-radius:999px; border:1px solid var(--silver); color:var(--silver); white-space:nowrap;
+  }
+  .taken-pill.filled{background:var(--silver); color:#0b0c0d;}
+  .rank-item.taken{opacity:.55;}
+  .rank-item.taken .ri-name{text-decoration:line-through; text-decoration-color:var(--silver); text-decoration-thickness:2px;}
+  .rank-item.taken .ri-sub{text-decoration:line-through; text-decoration-color:var(--chalk-dim); text-decoration-thickness:1px;}
+
+  /* Position colors */
+  :root{
+    --pos-qb: #a855f7;
+    --pos-rb: #22c55e;
+    --pos-wr: #38bdf8;
+    --pos-te: #f97316;
+    --pos-k:  #eab308;
+    --pos-dst:#f43f5e;
+  }
+  .rank-item.pos-qb{border-left-color:var(--pos-qb);}
+  .rank-item.pos-rb{border-left-color:var(--pos-rb);}
+  .rank-item.pos-wr{border-left-color:var(--pos-wr);}
+  .rank-item.pos-te{border-left-color:var(--pos-te);}
+  .rank-item.pos-k{border-left-color:var(--pos-k);}
+  .rank-item.pos-dst{border-left-color:var(--pos-dst);}
+
+  .pos-badge{
+    font-family:'IBM Plex Mono',monospace; font-size:9.5px; font-weight:700; letter-spacing:.03em;
+    padding:2px 6px; border-radius:4px; color:#0b0c0d; white-space:nowrap;
+  }
+  .pos-badge.pos-qb{background:var(--pos-qb);}
+  .pos-badge.pos-rb{background:var(--pos-rb);}
+  .pos-badge.pos-wr{background:var(--pos-wr);}
+  .pos-badge.pos-te{background:var(--pos-te);}
+  .pos-badge.pos-k{background:var(--pos-k);}
+  .pos-badge.pos-dst{background:var(--pos-dst);}
+
+  .suggest-row.pos-qb{border-left:3px solid var(--pos-qb);}
+  .suggest-row.pos-rb{border-left:3px solid var(--pos-rb);}
+  .suggest-row.pos-wr{border-left:3px solid var(--pos-wr);}
+  .suggest-row.pos-te{border-left:3px solid var(--pos-te);}
+  .suggest-row.pos-k{border-left:3px solid var(--pos-k);}
+  .suggest-row.pos-dst{border-left:3px solid var(--pos-dst);}
+
+  .lineup-slot.filled.pos-qb{border-color:var(--pos-qb);}
+  .lineup-slot.filled.pos-rb{border-color:var(--pos-rb);}
+  .lineup-slot.filled.pos-wr{border-color:var(--pos-wr);}
+  .lineup-slot.filled.pos-te{border-color:var(--pos-te);}
+  .lineup-slot.filled.pos-k{border-color:var(--pos-k);}
+  .lineup-slot.filled.pos-dst{border-color:var(--pos-dst);}
+
+  /* Regler (rules) tab */
+  .rules-list{display:flex; flex-direction:column; gap:8px; margin-bottom:14px;}
+  .rule-row{
+    display:flex; align-items:center; gap:12px; padding:10px; border:1px solid var(--line);
+    border-radius:8px; background:var(--bg); flex-wrap:wrap;
+  }
+  .rule-label-input{
+    font-family:'IBM Plex Mono',monospace; font-size:12px; background:var(--black-panel); color:var(--chalk);
+    border:1px solid var(--line); border-radius:6px; padding:6px 8px; width:140px; flex-shrink:0;
+  }
+  .rule-pos-checks{display:flex; gap:8px; flex-wrap:wrap; flex:1;}
+  .pos-check{
+    display:flex; align-items:center; gap:4px; font-family:'IBM Plex Mono',monospace; font-size:10.5px;
+    padding:3px 7px; border-radius:5px; border:1px solid var(--line); color:var(--chalk-dim); cursor:pointer;
+  }
+  .pos-check input{accent-color:currentColor;}
+  .pos-check.pos-qb.checked{border-color:var(--pos-qb); color:var(--pos-qb);}
+  .pos-check.pos-rb.checked{border-color:var(--pos-rb); color:var(--pos-rb);}
+  .pos-check.pos-wr.checked{border-color:var(--pos-wr); color:var(--pos-wr);}
+  .pos-check.pos-te.checked{border-color:var(--pos-te); color:var(--pos-te);}
+  .pos-check.pos-k.checked{border-color:var(--pos-k); color:var(--pos-k);}
+  .pos-check.pos-dst.checked{border-color:var(--pos-dst); color:var(--pos-dst);}
+  .rule-remove-btn{padding:5px 9px; flex-shrink:0;}
+  .rules-actions{display:flex; align-items:center; gap:12px; flex-wrap:wrap;}
+  .rules-bench-info{font-family:'IBM Plex Mono',monospace; font-size:11.5px; color:var(--chalk-dim);}
+
+  footer{text-align:center; font-size:11px; color:var(--chalk-dim); margin-top:24px; font-family:'IBM Plex Mono',monospace;}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="top">
+    <div class="eyebrow">Två ligor · Snake Draft · Philadelphia Eagles Edition</div>
+    <h1>DRAFTBOARD</h1>
+    <div class="sub">Klicka i en ruta och sök fram spelaren — draftordningen räknas ut automatiskt.</div>
+    <div class="backup-row">
+      <button class="backup-btn" data-action="export-backup">💾 Exportera backup</button>
+      <button class="backup-btn" data-action="import-backup">📂 Importera backup</button>
+      <input type="file" id="import-file-input" accept="application/json" style="display:none;">
+      <span id="backup-status" class="backup-status"></span>
+    </div>
+  </header>
+
+  <div id="boot-error"><strong>Något gick fel</strong><span id="boot-error-msg"></span></div>
+
+  <div id="backup-modal-overlay" class="backup-modal-overlay">
+    <div class="backup-modal">
+      <div class="backup-modal-head">
+        <strong>Backup: <span id="backup-modal-filename"></span></strong>
+        <button class="backup-btn" data-action="close-backup-modal">✕ Stäng</button>
+      </div>
+      <p class="backup-modal-hint">Om nedladdningen inte syns någonstans: kopiera texten nedan och spara den själv (t.ex. i Anteckningar eller ett mejl till dig själv). Vill du importera en backup: klistra in texten i rutan nedan och tryck "Importera från text".</p>
+      <textarea id="backup-modal-textarea" class="backup-modal-textarea"></textarea>
+      <div class="backup-modal-actions">
+        <button class="backup-btn" data-action="copy-backup-text">📋 Kopiera text</button>
+        <button class="backup-btn" data-action="import-backup-text">⬆ Importera från text</button>
+        <span id="backup-modal-copy-status" class="backup-status"></span>
+      </div>
+    </div>
+  </div>
+
+  <div class="nav">
+    <div class="nav-group">
+      <button class="nav-btn league-b active" data-action="switch-page" data-page="balla">Ballsvenkan</button>
+      <button class="nav-btn league-b" data-action="switch-page" data-page="douche">Douchebag</button>
+    </div>
+    <div class="nav-group">
+      <button class="nav-btn" data-action="switch-page" data-page="QB">QB</button>
+      <button class="nav-btn" data-action="switch-page" data-page="RB">RB</button>
+      <button class="nav-btn" data-action="switch-page" data-page="WR">WR</button>
+      <button class="nav-btn" data-action="switch-page" data-page="TE">TE</button>
+      <button class="nav-btn" data-action="switch-page" data-page="K">K</button>
+      <button class="nav-btn" data-action="switch-page" data-page="DST">DEF</button>
+      <button class="nav-btn" data-action="switch-page" data-page="ROOKIE">Rookies</button>
+    </div>
+    <div class="nav-group">
+      <button class="nav-btn nav-btn-myteam" data-action="switch-page" data-page="MYTEAM">Mitt lag</button>
+      <button class="nav-btn" data-action="switch-page" data-page="ALLTEAMS">Alla lag</button>
+      <button class="nav-btn" data-action="switch-page" data-page="RULES">Regler</button>
+    </div>
+  </div>
+
+  <section class="page active" data-page="balla" id="page-balla"></section>
+  <section class="page" data-page="douche" id="page-douche"></section>
+  <section class="page" data-page="QB" id="page-QB"></section>
+  <section class="page" data-page="RB" id="page-RB"></section>
+  <section class="page" data-page="WR" id="page-WR"></section>
+  <section class="page" data-page="TE" id="page-TE"></section>
+  <section class="page" data-page="K" id="page-K"></section>
+  <section class="page" data-page="DST" id="page-DST"></section>
+  <section class="page" data-page="ROOKIE" id="page-ROOKIE"></section>
+  <section class="page" data-page="MYTEAM" id="page-MYTEAM"></section>
+  <section class="page" data-page="ALLTEAMS" id="page-ALLTEAMS"></section>
+  <section class="page" data-page="RULES" id="page-RULES"></section>
+
+  <div id="global-suggest"></div>
+
+  <footer>Spelardata från 4for4:s Top-200 (Half PPR) · rookies markerade med R · sparas automatiskt</footer>
+</div>
+
+<script>
+function showBootError(err){
+  try{
+    const box = document.getElementById('boot-error');
+    const msg = document.getElementById('boot-error-msg');
+    if(box && msg){
+      msg.textContent = (err && err.stack) ? err.stack : String(err);
+      box.style.display = 'block';
+    }
+  }catch(e){ /* ignore */ }
+}
+window.addEventListener('error', (e) => showBootError(e.error || e.message));
+window.addEventListener('unhandledrejection', (e) => showBootError(e.reason));
+
+try {
+
+const PLAYERS = [{"rank": "RB-1", "adp": "1.01", "name": "J. Gibbs", "team": "DET", "bye": "6", "ppg": "16.3", "pos": "RB", "rookie": false}, {"rank": "RB-2", "adp": "1.02", "name": "B. Robinson", "team": "ATL", "bye": "11", "ppg": "15.9", "pos": "RB", "rookie": false}, {"rank": "WR-1", "adp": "1.03", "name": "J. Chase", "team": "CIN", "bye": "6", "ppg": "15.5", "pos": "WR", "rookie": false}, {"rank": "WR-2", "adp": "1.04", "name": "P. Nacua", "team": "LAR", "bye": "11", "ppg": "15.2", "pos": "WR", "rookie": false}, {"rank": "WR-3", "adp": "1.05", "name": "J. Smith-Njigba", "team": "SEA", "bye": "11", "ppg": "15.0", "pos": "WR", "rookie": false}, {"rank": "RB-4", "adp": "1.06", "name": "C. McCaffrey", "team": "SF", "bye": "8", "ppg": "15.3", "pos": "RB", "rookie": false}, {"rank": "WR-4", "adp": "1.07", "name": "A. St. Brown", "team": "DET", "bye": "6", "ppg": "13.6", "pos": "WR", "rookie": false}, {"rank": "RB-3", "adp": "1.08", "name": "J. Taylor", "team": "IND", "bye": "13", "ppg": "15.8", "pos": "RB", "rookie": false}, {"rank": "WR-8", "adp": "1.09", "name": "C. Lamb", "team": "DAL", "bye": "14", "ppg": "11.0", "pos": "WR", "rookie": false}, {"rank": "RB-6", "adp": "1.10", "name": "A. Jeanty", "team": "LV", "bye": "13", "ppg": "12.8", "pos": "RB", "rookie": false}, {"rank": "WR-7", "adp": "1.11", "name": "J. Jefferson", "team": "MIN", "bye": "6", "ppg": "11.6", "pos": "WR", "rookie": false}, {"rank": "RB-7", "adp": "1.12", "name": "J. Cook", "team": "BUF", "bye": "7", "ppg": "12.3", "pos": "RB", "rookie": false}, {"rank": "RB-5", "adp": "2.01", "name": "D. Achane", "team": "MIA", "bye": "6", "ppg": "15.2", "pos": "RB", "rookie": false}, {"rank": "RB-9", "adp": "2.02", "name": "S. Barkley", "team": "PHI", "bye": "10", "ppg": "12.1", "pos": "RB", "rookie": false}, {"rank": "RB-11", "adp": "2.03", "name": "O. Hampton", "team": "LAC", "bye": "7", "ppg": "11.9", "pos": "RB", "rookie": false}, {"rank": "RB-10", "adp": "2.04", "name": "C. Brown", "team": "CIN", "bye": "6", "ppg": "12.0", "pos": "RB", "rookie": false}, {"rank": "WR-5", "adp": "2.05", "name": "D. London", "team": "ATL", "bye": "11", "ppg": "12.8", "pos": "WR", "rookie": false}, {"rank": "TE-3", "adp": "2.06", "name": "B. Bowers", "team": "LV", "bye": "13", "ppg": "9.2", "pos": "TE", "rookie": false}, {"rank": "RB-13", "adp": "2.07", "name": "K. Walker", "team": "KC", "bye": "5", "ppg": "11.7", "pos": "RB", "rookie": false}, {"rank": "RB-12", "adp": "2.08", "name": "D. Henry", "team": "BAL", "bye": "13", "ppg": "11.8", "pos": "RB", "rookie": false}, {"rank": "WR-6", "adp": "2.09", "name": "A. Brown", "team": "NE", "bye": "11", "ppg": "11.6", "pos": "WR", "rookie": false}, {"rank": "WR-9", "adp": "2.10", "name": "N. Collins", "team": "HOU", "bye": "8", "ppg": "10.8", "pos": "WR", "rookie": false}, {"rank": "TE-1", "adp": "2.11", "name": "T. McBride", "team": "ARI", "bye": "14", "ppg": "10.2", "pos": "TE", "rookie": false}, {"rank": "RB-14", "adp": "2.12", "name": "J. Love", "team": "ARI", "bye": "14", "ppg": "11.5", "pos": "RB", "rookie": true}, {"rank": "WR-10", "adp": "3.01", "name": "G. Pickens", "team": "DAL", "bye": "14", "ppg": "10.8", "pos": "WR", "rookie": false}, {"rank": "WR-19", "adp": "3.02", "name": "R. Rice", "team": "KC", "bye": "5", "ppg": "10.3", "pos": "WR", "rookie": false}, {"rank": "WR-11", "adp": "3.03", "name": "C. Olave", "team": "NO", "bye": "8", "ppg": "10.5", "pos": "WR", "rookie": false}, {"rank": "QB-1", "adp": "3.04", "name": "J. Allen", "team": "BUF", "bye": "7", "ppg": "20.1", "pos": "QB", "rookie": false}, {"rank": "WR-12", "adp": "3.05", "name": "D. Smith", "team": "PHI", "bye": "10", "ppg": "10.5", "pos": "WR", "rookie": false}, {"rank": "RB-20", "adp": "3.06", "name": "B. Hall", "team": "NYJ", "bye": "13", "ppg": "10.5", "pos": "RB", "rookie": false}, {"rank": "RB-8", "adp": "3.07", "name": "K. Williams", "team": "LAR", "bye": "11", "ppg": "12.1", "pos": "RB", "rookie": false}, {"rank": "WR-38", "adp": "3.08", "name": "M. Nabers", "team": "NYG", "bye": "8", "ppg": "7.9", "pos": "WR", "rookie": false}, {"rank": "RB-19", "adp": "3.09", "name": "T. Etienne", "team": "NO", "bye": "8", "ppg": "10.6", "pos": "RB", "rookie": false}, {"rank": "RB-21", "adp": "3.10", "name": "J. Williams", "team": "DAL", "bye": "14", "ppg": "10.5", "pos": "RB", "rookie": false}, {"rank": "WR-18", "adp": "3.11", "name": "Z. Flowers", "team": "BAL", "bye": "13", "ppg": "10.3", "pos": "WR", "rookie": false}, {"rank": "RB-16", "adp": "3.12", "name": "J. Jacobs", "team": "GB", "bye": "11", "ppg": "11.1", "pos": "RB", "rookie": false}, {"rank": "WR-15", "adp": "4.01", "name": "G. Wilson", "team": "NYJ", "bye": "13", "ppg": "10.4", "pos": "WR", "rookie": false}, {"rank": "WR-14", "adp": "4.02", "name": "T. McMillan", "team": "CAR", "bye": "5", "ppg": "10.4", "pos": "WR", "rookie": false}, {"rank": "WR-13", "adp": "4.03", "name": "T. Higgins", "team": "CIN", "bye": "6", "ppg": "10.5", "pos": "WR", "rookie": false}, {"rank": "TE-2", "adp": "4.04", "name": "C. Loveland", "team": "CHI", "bye": "10", "ppg": "9.3", "pos": "TE", "rookie": false}, {"rank": "WR-25", "adp": "4.05", "name": "E. Egbuka", "team": "TB", "bye": "10", "ppg": "8.9", "pos": "WR", "rookie": false}, {"rank": "WR-17", "adp": "4.06", "name": "L. McConkey", "team": "LAC", "bye": "7", "ppg": "10.4", "pos": "WR", "rookie": false}, {"rank": "RB-15", "adp": "4.07", "name": "C. Skattebo", "team": "NYG", "bye": "8", "ppg": "11.2", "pos": "RB", "rookie": false}, {"rank": "WR-22", "adp": "4.08", "name": "T. McLaurin", "team": "WAS", "bye": "7", "ppg": "9.9", "pos": "WR", "rookie": false}, {"rank": "WR-16", "adp": "4.09", "name": "J. Waddle", "team": "DEN", "bye": "10", "ppg": "10.4", "pos": "WR", "rookie": false}, {"rank": "WR-24", "adp": "4.10", "name": "L. Burden", "team": "CHI", "bye": "10", "ppg": "9.4", "pos": "WR", "rookie": false}, {"rank": "QB-2", "adp": "4.11", "name": "L. Jackson", "team": "BAL", "bye": "13", "ppg": "18.7", "pos": "QB", "rookie": false}, {"rank": "WR-20", "adp": "4.12", "name": "D. Adams", "team": "LAR", "bye": "11", "ppg": "10.0", "pos": "WR", "rookie": false}, {"rank": "RB-24", "adp": "5.01", "name": "T. Henderson", "team": "NE", "bye": "11", "ppg": "10.0", "pos": "RB", "rookie": false}, {"rank": "RB-22", "adp": "5.02", "name": "D. Swift", "team": "CHI", "bye": "10", "ppg": "10.3", "pos": "RB", "rookie": false}, {"rank": "RB-17", "adp": "5.03", "name": "Q. Judkins", "team": "CLE", "bye": "11", "ppg": "11.0", "pos": "RB", "rookie": false}, {"rank": "RB-23", "adp": "5.04", "name": "D. Montgomery", "team": "HOU", "bye": "8", "ppg": "10.1", "pos": "RB", "rookie": false}, {"rank": "TE-5", "adp": "5.05", "name": "T. Warren", "team": "IND", "bye": "13", "ppg": "8.7", "pos": "TE", "rookie": false}, {"rank": "WR-23", "adp": "5.06", "name": "J. Williams", "team": "DET", "bye": "6", "ppg": "9.4", "pos": "WR", "rookie": false}, {"rank": "RB-25", "adp": "5.07", "name": "B. Irving", "team": "TB", "bye": "10", "ppg": "10.0", "pos": "RB", "rookie": false}, {"rank": "WR-30", "adp": "5.08", "name": "D. Moore", "team": "BUF", "bye": "7", "ppg": "8.4", "pos": "WR", "rookie": false}, {"rank": "QB-3", "adp": "5.09", "name": "D. Maye", "team": "NE", "bye": "11", "ppg": "17.5", "pos": "QB", "rookie": false}, {"rank": "WR-26", "adp": "5.10", "name": "M. Evans", "team": "SF", "bye": "8", "ppg": "8.5", "pos": "WR", "rookie": false}, {"rank": "QB-6", "adp": "5.11", "name": "J. Burrow", "team": "CIN", "bye": "6", "ppg": "17.3", "pos": "QB", "rookie": false}, {"rank": "RB-26", "adp": "5.12", "name": "B. Tuten", "team": "JAX", "bye": "7", "ppg": "10.0", "pos": "RB", "rookie": false}, {"rank": "WR-29", "adp": "6.01", "name": "R. Odunze", "team": "CHI", "bye": "10", "ppg": "8.4", "pos": "WR", "rookie": false}, {"rank": "WR-21", "adp": "6.02", "name": "C. Watson", "team": "GB", "bye": "11", "ppg": "9.9", "pos": "WR", "rookie": false}, {"rank": "QB-4", "adp": "6.03", "name": "J. Daniels", "team": "WAS", "bye": "7", "ppg": "17.4", "pos": "QB", "rookie": false}, {"rank": "WR-32", "adp": "6.04", "name": "C. Tate", "team": "TEN", "bye": "9", "ppg": "8.2", "pos": "WR", "rookie": true}, {"rank": "RB-18", "adp": "6.05", "name": "J. Price", "team": "SEA", "bye": "11", "ppg": "10.6", "pos": "RB", "rookie": false}, {"rank": "WR-43", "adp": "6.06", "name": "M. Harrison Jr.", "team": "ARI", "bye": "14", "ppg": "7.6", "pos": "WR", "rookie": false}, {"rank": "QB-5", "adp": "6.07", "name": "J. Hurts", "team": "PHI", "bye": "10", "ppg": "17.3", "pos": "QB", "rookie": false}, {"rank": "WR-28", "adp": "6.08", "name": "B. Thomas Jr.", "team": "JAX", "bye": "7", "ppg": "8.4", "pos": "WR", "rookie": false}, {"rank": "RB-27", "adp": "6.09", "name": "J. Warren", "team": "PIT", "bye": "9", "ppg": "9.9", "pos": "RB", "rookie": false}, {"rank": "WR-40", "adp": "6.10", "name": "J. Tyson", "team": "NO", "bye": "8", "ppg": "7.8", "pos": "WR", "rookie": true}, {"rank": "QB-10", "adp": "6.11", "name": "C. Williams", "team": "CHI", "bye": "10", "ppg": "16.7", "pos": "QB", "rookie": false}, {"rank": "RB-33", "adp": "6.12", "name": "C. Hubbard", "team": "CAR", "bye": "5", "ppg": "7.8", "pos": "RB", "rookie": false}, {"rank": "WR-27", "adp": "7.01", "name": "D. Metcalf", "team": "PIT", "bye": "9", "ppg": "8.5", "pos": "WR", "rookie": false}, {"rank": "RB-30", "adp": "7.02", "name": "T. Pollard", "team": "TEN", "bye": "9", "ppg": "9.5", "pos": "RB", "rookie": false}, {"rank": "TE-4", "adp": "7.03", "name": "T. Kraft", "team": "GB", "bye": "11", "ppg": "9.1", "pos": "TE", "rookie": false}, {"rank": "WR-33", "adp": "7.04", "name": "P. Washington", "team": "JAX", "bye": "7", "ppg": "8.1", "pos": "WR", "rookie": false}, {"rank": "WR-44", "adp": "7.05", "name": "A. Pierce", "team": "IND", "bye": "13", "ppg": "7.4", "pos": "WR", "rookie": false}, {"rank": "WR-41", "adp": "7.06", "name": "C. Sutton", "team": "DEN", "bye": "10", "ppg": "7.8", "pos": "WR", "rookie": false}, {"rank": "TE-6", "adp": "7.07", "name": "H. Fannin", "team": "CLE", "bye": "11", "ppg": "8.6", "pos": "TE", "rookie": false}, {"rank": "RB-28", "adp": "7.08", "name": "R. Stevenson", "team": "NE", "bye": "11", "ppg": "9.9", "pos": "RB", "rookie": false}, {"rank": "TE-9", "adp": "7.09", "name": "K. Pitts", "team": "ATL", "bye": "11", "ppg": "7.6", "pos": "TE", "rookie": false}, {"rank": "QB-7", "adp": "7.10", "name": "J. Herbert", "team": "LAC", "bye": "7", "ppg": "16.9", "pos": "QB", "rookie": false}, {"rank": "QB-9", "adp": "7.11", "name": "D. Prescott", "team": "DAL", "bye": "14", "ppg": "16.8", "pos": "QB", "rookie": false}, {"rank": "RB-36", "adp": "7.12", "name": "R. Harvey", "team": "DEN", "bye": "10", "ppg": "7.4", "pos": "RB", "rookie": false}, {"rank": "TE-7", "adp": "8.01", "name": "S. LaPorta", "team": "DET", "bye": "6", "ppg": "8.1", "pos": "TE", "rookie": false}, {"rank": "RB-29", "adp": "8.02", "name": "R. Dowdle", "team": "PIT", "bye": "9", "ppg": "9.9", "pos": "RB", "rookie": false}, {"rank": "QB-8", "adp": "8.03", "name": "T. Lawrence", "team": "JAX", "bye": "7", "ppg": "16.8", "pos": "QB", "rookie": false}, {"rank": "QB-12", "adp": "8.04", "name": "J. Dart", "team": "NYG", "bye": "8", "ppg": "16.6", "pos": "QB", "rookie": false}, {"rank": "WR-76", "adp": "8.05", "name": "M. Lemon", "team": "PHI", "bye": "10", "ppg": "4.4", "pos": "WR", "rookie": true}, {"rank": "WR-31", "adp": "8.06", "name": "C. Godwin", "team": "TB", "bye": "10", "ppg": "8.3", "pos": "WR", "rookie": false}, {"rank": "WR-39", "adp": "8.07", "name": "M. Pittman Jr.", "team": "PIT", "bye": "9", "ppg": "7.9", "pos": "WR", "rookie": false}, {"rank": "RB-35", "adp": "8.08", "name": "K. Monangai", "team": "CHI", "bye": "10", "ppg": "7.5", "pos": "RB", "rookie": false}, {"rank": "WR-34", "adp": "8.09", "name": "M. Wilson", "team": "ARI", "bye": "14", "ppg": "8.1", "pos": "WR", "rookie": false}, {"rank": "RB-31", "adp": "8.10", "name": "K. Gainwell", "team": "TB", "bye": "10", "ppg": "9.0", "pos": "RB", "rookie": false}, {"rank": "WR-36", "adp": "8.11", "name": "Q. Johnston", "team": "LAC", "bye": "7", "ppg": "7.9", "pos": "WR", "rookie": false}, {"rank": "QB-11", "adp": "8.12", "name": "B. Purdy", "team": "SF", "bye": "8", "ppg": "16.6", "pos": "QB", "rookie": false}, {"rank": "RB-32", "adp": "9.01", "name": "J. Dobbins", "team": "DEN", "bye": "10", "ppg": "7.8", "pos": "RB", "rookie": false}, {"rank": "QB-16", "adp": "9.02", "name": "M. Stafford", "team": "LAR", "bye": "11", "ppg": "15.8", "pos": "QB", "rookie": false}, {"rank": "RB-37", "adp": "9.03", "name": "B. Corum", "team": "LAR", "bye": "11", "ppg": "7.4", "pos": "RB", "rookie": false}, {"rank": "QB-13", "adp": "9.04", "name": "P. Mahomes", "team": "KC", "bye": "5", "ppg": "16.4", "pos": "QB", "rookie": false}, {"rank": "RB-34", "adp": "9.05", "name": "J. Brooks", "team": "CAR", "bye": "5", "ppg": "7.5", "pos": "RB", "rookie": false}, {"rank": "RB-39", "adp": "9.06", "name": "R. White", "team": "WAS", "bye": "7", "ppg": "7.2", "pos": "RB", "rookie": false}, {"rank": "TE-8", "adp": "9.07", "name": "G. Kittle", "team": "SF", "bye": "8", "ppg": "7.9", "pos": "TE", "rookie": false}, {"rank": "WR-42", "adp": "9.08", "name": "J. Meyers", "team": "JAX", "bye": "7", "ppg": "7.6", "pos": "WR", "rookie": false}, {"rank": "WR-47", "adp": "9.09", "name": "R. Pearsall", "team": "SF", "bye": "8", "ppg": "7.1", "pos": "WR", "rookie": false}, {"rank": "WR-37", "adp": "9.10", "name": "J. Downs", "team": "IND", "bye": "13", "ppg": "7.9", "pos": "WR", "rookie": false}, {"rank": "TE-10", "adp": "9.11", "name": "T. Kelce", "team": "KC", "bye": "5", "ppg": "7.4", "pos": "TE", "rookie": false}, {"rank": "WR-35", "adp": "9.12", "name": "J. Reed", "team": "GB", "bye": "11", "ppg": "8.1", "pos": "WR", "rookie": false}, {"rank": "WR-48", "adp": "10.01", "name": "J. Addison", "team": "MIN", "bye": "6", "ppg": "7.1", "pos": "WR", "rookie": false}, {"rank": "WR-46", "adp": "10.02", "name": "W. Robinson", "team": "TEN", "bye": "9", "ppg": "7.3", "pos": "WR", "rookie": false}, {"rank": "QB-14", "adp": "10.03", "name": "B. Nix", "team": "DEN", "bye": "10", "ppg": "16.3", "pos": "QB", "rookie": false}, {"rank": "WR-49", "adp": "10.04", "name": "X. Worthy", "team": "KC", "bye": "5", "ppg": "7.1", "pos": "WR", "rookie": false}, {"rank": "RB-40", "adp": "10.05", "name": "A. Jones", "team": "MIN", "bye": "6", "ppg": "7.2", "pos": "RB", "rookie": false}, {"rank": "TE-13", "adp": "10.06", "name": "J. Ferguson", "team": "DAL", "bye": "14", "ppg": "7.2", "pos": "TE", "rookie": false}, {"rank": "QB-15", "adp": "10.07", "name": "J. Goff", "team": "DET", "bye": "6", "ppg": "16.0", "pos": "QB", "rookie": false}, {"rank": "TE-12", "adp": "10.08", "name": "D. Goedert", "team": "PHI", "bye": "10", "ppg": "7.3", "pos": "TE", "rookie": false}, {"rank": "TE-14", "adp": "10.09", "name": "D. Kincaid", "team": "BUF", "bye": "7", "ppg": "7.2", "pos": "TE", "rookie": false}, {"rank": "RB-45", "adp": "10.10", "name": "J. Croskey-Merritt", "team": "WAS", "bye": "7", "ppg": "5.8", "pos": "RB", "rookie": false}, {"rank": "QB-17", "adp": "10.11", "name": "K. Murray", "team": "MIN", "bye": "6", "ppg": "15.8", "pos": "QB", "rookie": false}, {"rank": "WR-53", "adp": "10.12", "name": "M. Golden", "team": "GB", "bye": "11", "ppg": "6.8", "pos": "WR", "rookie": false}, {"rank": "TE-17", "adp": "11.01", "name": "I. Likely", "team": "NYG", "bye": "8", "ppg": "6.5", "pos": "TE", "rookie": false}, {"rank": "RB-41", "adp": "11.02", "name": "J. Mason", "team": "MIN", "bye": "6", "ppg": "7.2", "pos": "RB", "rookie": false}, {"rank": "WR-45", "adp": "11.03", "name": "R. Doubs", "team": "NE", "bye": "11", "ppg": "7.4", "pos": "WR", "rookie": false}, {"rank": "WR-54", "adp": "11.04", "name": "K. Concepcion", "team": "CLE", "bye": "11", "ppg": "6.4", "pos": "WR", "rookie": true}, {"rank": "TE-11", "adp": "11.05", "name": "M. Andrews", "team": "BAL", "bye": "13", "ppg": "7.3", "pos": "TE", "rookie": false}, {"rank": "QB-20", "adp": "11.06", "name": "B. Mayfield", "team": "TB", "bye": "10", "ppg": "15.5", "pos": "QB", "rookie": false}, {"rank": "QB-21", "adp": "11.07", "name": "T. Shough", "team": "NO", "bye": "8", "ppg": "15.1", "pos": "QB", "rookie": false}, {"rank": "QB-18", "adp": "11.08", "name": "J. Love", "team": "GB", "bye": "11", "ppg": "15.6", "pos": "QB", "rookie": false}, {"rank": "WR-52", "adp": "11.09", "name": "J. Higgins", "team": "HOU", "bye": "8", "ppg": "6.9", "pos": "WR", "rookie": false}, {"rank": "WR-51", "adp": "11.10", "name": "K. Shakir", "team": "BUF", "bye": "7", "ppg": "7.0", "pos": "WR", "rookie": false}, {"rank": "WR-59", "adp": "11.11", "name": "J. Coker", "team": "CAR", "bye": "5", "ppg": "5.8", "pos": "WR", "rookie": false}, {"rank": "RB-38", "adp": "11.12", "name": "C. Rodriguez", "team": "JAX", "bye": "7", "ppg": "7.3", "pos": "RB", "rookie": false}, {"rank": "RB-50", "adp": "12.01", "name": "T. Tracy", "team": "NYG", "bye": "8", "ppg": "5.4", "pos": "RB", "rookie": false}, {"rank": "QB-19", "adp": "12.02", "name": "M. Willis", "team": "MIA", "bye": "6", "ppg": "15.6", "pos": "QB", "rookie": false}, {"rank": "RB-46", "adp": "12.03", "name": "W. Marks", "team": "HOU", "bye": "8", "ppg": "5.8", "pos": "RB", "rookie": false}, {"rank": "RB-52", "adp": "12.05", "name": "T. Allgeier", "team": "ARI", "bye": "14", "ppg": "5.0", "pos": "RB", "rookie": false}, {"rank": "WR-50", "adp": "12.06", "name": "R. Shaheed", "team": "SEA", "bye": "11", "ppg": "7.0", "pos": "WR", "rookie": false}, {"rank": "RB-64", "adp": "12.07", "name": "Z. Charbonnet", "team": "SEA", "bye": "11", "ppg": "4.0", "pos": "RB", "rookie": false}, {"rank": "TE-16", "adp": "12.08", "name": "O. Gadsden", "team": "LAC", "bye": "7", "ppg": "6.7", "pos": "TE", "rookie": false}, {"rank": "TE-20", "adp": "12.09", "name": "B. Strange", "team": "JAX", "bye": "7", "ppg": "6.2", "pos": "TE", "rookie": false}, {"rank": "RB-43", "adp": "12.10", "name": "I. Pacheco", "team": "DET", "bye": "6", "ppg": "6.9", "pos": "RB", "rookie": false}, {"rank": "RB-42", "adp": "12.11", "name": "T. Spears", "team": "TEN", "bye": "9", "ppg": "6.9", "pos": "RB", "rookie": false}, {"rank": "TE-18", "adp": "12.12", "name": "J. Johnson", "team": "NO", "bye": "8", "ppg": "6.3", "pos": "TE", "rookie": false}, {"rank": "RB-73", "adp": "13.01", "name": "K. Mitchell", "team": "LAC", "bye": "7", "ppg": "3.1", "pos": "RB", "rookie": false}, {"rank": "WR-66", "adp": "13.02", "name": "J. McMillan", "team": "TB", "bye": "10", "ppg": "4.8", "pos": "WR", "rookie": false}, {"rank": "WR-69", "adp": "13.03", "name": "O. Cooper Jr.", "team": "NYJ", "bye": "13", "ppg": "4.8", "pos": "WR", "rookie": false}, {"rank": "TE-19", "adp": "13.04", "name": "C. Okonkwo", "team": "WAS", "bye": "7", "ppg": "6.3", "pos": "TE", "rookie": false}, {"rank": "TE-15", "adp": "13.05", "name": "H. Henry", "team": "NE", "bye": "11", "ppg": "6.7", "pos": "TE", "rookie": false}, {"rank": "TE-21", "adp": "13.06", "name": "K. Sadiq", "team": "NYJ", "bye": "13", "ppg": "6.2", "pos": "TE", "rookie": true}, {"rank": "WR-68", "adp": "13.07", "name": "D. Boston", "team": "CLE", "bye": "11", "ppg": "4.8", "pos": "WR", "rookie": true}, {"rank": "QB-22", "adp": "13.08", "name": "C. Stroud", "team": "HOU", "bye": "8", "ppg": "14.9", "pos": "QB", "rookie": false}, {"rank": "WR-62", "adp": "13.09", "name": "J. Jennings", "team": "MIN", "bye": "6", "ppg": "5.5", "pos": "WR", "rookie": false}, {"rank": "RB-55", "adp": "13.10", "name": "A. Kamara", "team": "NO", "bye": "8", "ppg": "4.7", "pos": "RB", "rookie": false}, {"rank": "TE-24", "adp": "13.11", "name": "T. Hockenson", "team": "MIN", "bye": "6", "ppg": "5.8", "pos": "TE", "rookie": false}, {"rank": "QB-27", "adp": "13.12", "name": "D. Jones", "team": "IND", "bye": "13", "ppg": "13.5", "pos": "QB", "rookie": false}, {"rank": "QB-28", "adp": "14.01", "name": "C. Ward", "team": "TEN", "bye": "9", "ppg": "13.1", "pos": "QB", "rookie": false}, {"rank": "WR-56", "adp": "14.02", "name": "T. Tucker", "team": "LV", "bye": "13", "ppg": "5.9", "pos": "WR", "rookie": false}, {"rank": "RB-63", "adp": "14.03", "name": "T. Bigsby", "team": "PHI", "bye": "10", "ppg": "4.0", "pos": "RB", "rookie": false}, {"rank": "RB-44", "adp": "14.04", "name": "B. Robinson", "team": "ATL", "bye": "11", "ppg": "6.6", "pos": "RB", "rookie": false}, {"rank": "QB-23", "adp": "14.05", "name": "S. Darnold", "team": "SEA", "bye": "11", "ppg": "14.4", "pos": "QB", "rookie": false}, {"rank": "WR-74", "adp": "14.06", "name": "J. Nailor", "team": "LV", "bye": "13", "ppg": "4.6", "pos": "WR", "rookie": false}, {"rank": "WR-86", "adp": "14.07", "name": "J. Jeudy", "team": "CLE", "bye": "11", "ppg": "3.7", "pos": "WR", "rookie": false}, {"rank": "RB-62", "adp": "14.08", "name": "J. Coleman", "team": "DEN", "bye": "10", "ppg": "4.0", "pos": "RB", "rookie": false}, {"rank": "TE-22", "adp": "14.09", "name": "D. Schultz", "team": "HOU", "bye": "8", "ppg": "6.1", "pos": "TE", "rookie": false}, {"rank": "QB-24", "adp": "14.11", "name": "B. Young", "team": "CAR", "bye": "5", "ppg": "14.0", "pos": "QB", "rookie": false}, {"rank": "RB-47", "adp": "14.12", "name": "B. Allen", "team": "NYJ", "bye": "13", "ppg": "5.7", "pos": "RB", "rookie": false}, {"rank": "WR-60", "adp": "15.01", "name": "I. TeSlaa", "team": "DET", "bye": "6", "ppg": "5.5", "pos": "WR", "rookie": false}, {"rank": "TE-23", "adp": "15.03", "name": "A. Barner", "team": "SEA", "bye": "11", "ppg": "6.0", "pos": "TE", "rookie": false}, {"rank": "WR-85", "adp": "15.04", "name": "C. Ridley", "team": "TEN", "bye": "9", "ppg": "4.0", "pos": "WR", "rookie": false}, {"rank": "RB-56", "adp": "15.05", "name": "R. Davis", "team": "BUF", "bye": "7", "ppg": "4.7", "pos": "RB", "rookie": false}, {"rank": "WR-61", "adp": "15.06", "name": "A. Williams", "team": "WAS", "bye": "7", "ppg": "5.5", "pos": "WR", "rookie": true}, {"rank": "QB-30", "adp": "15.07", "name": "F. Mendoza", "team": "LV", "bye": "13", "ppg": "11.9", "pos": "QB", "rookie": false}, {"rank": "RB-84", "adp": "15.08", "name": "J. Blue", "team": "DAL", "bye": "14", "ppg": "1.9", "pos": "RB", "rookie": false}, {"rank": "RB-75", "adp": "15.09", "name": "J. Conner", "team": "ARI", "bye": "14", "ppg": "2.8", "pos": "RB", "rookie": false}, {"rank": "RB-115", "adp": "15.10", "name": "E. Johnson", "team": "KC", "bye": "5", "ppg": "0.4", "pos": "RB", "rookie": false}, {"rank": "QB-25", "adp": "15.11", "name": "A. Rodgers", "team": "PIT", "bye": "9", "ppg": "13.9", "pos": "QB", "rookie": false}, {"rank": "TE-35", "adp": "15.12", "name": "T. Ferguson", "team": "LAR", "bye": "11", "ppg": "3.9", "pos": "TE", "rookie": false}, {"rank": "RB-68", "adp": "16.01", "name": "M. Washington Jr.", "team": "LV", "bye": "13", "ppg": "3.6", "pos": "RB", "rookie": false}, {"rank": "RB-82", "adp": "16.03", "name": "J. James", "team": "SF", "bye": "8", "ppg": "2.2", "pos": "RB", "rookie": false}, {"rank": "WR-70", "adp": "16.04", "name": "G. Bernard", "team": "PIT", "bye": "9", "ppg": "4.8", "pos": "WR", "rookie": true}, {"rank": "RB-102", "adp": "16.05", "name": "N. Singleton", "team": "TEN", "bye": "9", "ppg": "1.3", "pos": "RB", "rookie": false}, {"rank": "RB-48", "adp": "16.06", "name": "J. Hill", "team": "BAL", "bye": "13", "ppg": "5.7", "pos": "RB", "rookie": false}, {"rank": "TE-54", "adp": "16.07", "name": "E. Stowers", "team": "PHI", "bye": "10", "ppg": "2.0", "pos": "TE", "rookie": false}, {"rank": "RB-78", "adp": "16.08", "name": "M. Lloyd", "team": "GB", "bye": "11", "ppg": "2.7", "pos": "RB", "rookie": false}, {"rank": "WR-67", "adp": "16.09", "name": "C. Bell", "team": "MIA", "bye": "6", "ppg": "4.8", "pos": "WR", "rookie": true}, {"rank": "RB-59", "adp": "16.10", "name": "D. Sampson", "team": "CLE", "bye": "11", "ppg": "4.2", "pos": "RB", "rookie": false}, {"rank": "RB-60", "adp": "16.11", "name": "K. Black", "team": "SF", "bye": "8", "ppg": "4.1", "pos": "RB", "rookie": false}, {"rank": "WR-73", "adp": "16.12", "name": "T. Hunter", "team": "JAX", "bye": "7", "ppg": "4.6", "pos": "WR", "rookie": false}, {"rank": "WR-57", "adp": "17.01", "name": "R. Flournoy", "team": "DAL", "bye": "14", "ppg": "5.9", "pos": "WR", "rookie": false}, {"rank": "WR-94", "adp": "17.02", "name": "T. Harris", "team": "LAC", "bye": "7", "ppg": "3.3", "pos": "WR", "rookie": false}, {"rank": "TE-31", "adp": "17.03", "name": "M. Taylor", "team": "NYJ", "bye": "13", "ppg": "4.9", "pos": "TE", "rookie": false}, {"rank": "WR-55", "adp": "17.04", "name": "A. Mitchell", "team": "NYJ", "bye": "13", "ppg": "5.9", "pos": "WR", "rookie": false}, {"rank": "WR-84", "adp": "17.05", "name": "M. Washington", "team": "MIA", "bye": "6", "ppg": "4.0", "pos": "WR", "rookie": false}, {"rank": "RB-54", "adp": "17.06", "name": "S. Tucker", "team": "TB", "bye": "10", "ppg": "4.8", "pos": "RB", "rookie": false}, {"rank": "WR-120", "adp": "17.07", "name": "C. Dike", "team": "TEN", "bye": "9", "ppg": "2.4", "pos": "WR", "rookie": false}, {"rank": "TE-27", "adp": "17.08", "name": "P. Freiermuth", "team": "PIT", "bye": "9", "ppg": "5.6", "pos": "TE", "rookie": false}, {"rank": "QB-26", "adp": "17.09", "name": "J. Brissett", "team": "ARI", "bye": "14", "ppg": "13.6", "pos": "QB", "rookie": false}, {"rank": "WR-99", "adp": "17.10", "name": "T. Dell", "team": "HOU", "bye": "8", "ppg": "3.2", "pos": "WR", "rookie": false}, {"rank": "RB-57", "adp": "17.11", "name": "K. Vidal", "team": "LAC", "bye": "7", "ppg": "4.2", "pos": "RB", "rookie": false}, {"rank": "RB-94", "adp": "17.12", "name": "K. Allen", "team": "WAS", "bye": "7", "ppg": "1.6", "pos": "RB", "rookie": false}, {"rank": "TE-29", "adp": "18.01", "name": "G. Helm", "team": "TEN", "bye": "9", "ppg": "5.5", "pos": "TE", "rookie": false}, {"rank": "RB-61", "adp": "18.02", "name": "E. Wilson", "team": "SEA", "bye": "11", "ppg": "4.1", "pos": "RB", "rookie": false}, {"rank": "WR-93", "adp": "18.03", "name": "K. Boutte", "team": "NE", "bye": "11", "ppg": "3.4", "pos": "WR", "rookie": false}, {"rank": "WR-128", "adp": "18.04", "name": "Z. Branch", "team": "ATL", "bye": "11", "ppg": "1.9", "pos": "WR", "rookie": false}, {"rank": "WR-79", "adp": "18.05", "name": "C. Kupp", "team": "SEA", "bye": "11", "ppg": "4.3", "pos": "WR", "rookie": false}, {"rank": "WR-105", "adp": "18.06", "name": "D. Mooney", "team": "NYG", "bye": "8", "ppg": "3.1", "pos": "WR", "rookie": false}, {"rank": "TE-28", "adp": "18.07", "name": "D. Njoku", "team": "LAC", "bye": "7", "ppg": "5.5", "pos": "TE", "rookie": false}, {"rank": "WR-64", "adp": "18.08", "name": "T. Franklin", "team": "DEN", "bye": "10", "ppg": "5.1", "pos": "WR", "rookie": false}, {"rank": "QB-29", "adp": "18.09", "name": "G. Smith", "team": "NYJ", "bye": "13", "ppg": "13.0", "pos": "QB", "rookie": false}, {"rank": "RB-70", "adp": "18.10", "name": "G. Holani", "team": "SEA", "bye": "11", "ppg": "3.4", "pos": "RB", "rookie": false}, {"rank": "RB-118", "adp": "18.11", "name": "D. Claiborne", "team": "MIN", "bye": "6", "ppg": "0.2", "pos": "RB", "rookie": false}, {"rank": "WR-95", "adp": "18.12", "name": "C. Kirk", "team": "SF", "bye": "8", "ppg": "3.3", "pos": "WR", "rookie": false}, {"rank": "WR-63", "adp": "19.01", "name": "J. Noel", "team": "HOU", "bye": "8", "ppg": "5.4", "pos": "WR", "rookie": false}, {"rank": "TE-34", "adp": "19.02", "name": "J. Tonges", "team": "SF", "bye": "8", "ppg": "3.9", "pos": "TE", "rookie": false}, {"rank": "RB-67", "adp": "19.03", "name": "J. Wright", "team": "MIA", "bye": "6", "ppg": "3.7", "pos": "RB", "rookie": false}, {"rank": "TE-40", "adp": "19.04", "name": "E. Engram", "team": "DEN", "bye": "10", "ppg": "3.5", "pos": "TE", "rookie": false}, {"rank": "QB-31", "adp": "19.05", "name": "S. Sanders", "team": "CLE", "bye": "11", "ppg": "9.4", "pos": "QB", "rookie": false}, {"rank": "WR-119", "adp": "19.06", "name": "P. Bryant", "team": "DEN", "bye": "10", "ppg": "2.4", "pos": "WR", "rookie": false}, {"rank": "QB-35", "adp": "19.07", "name": "K. Cousins", "team": "LV", "bye": "13", "ppg": "2.1", "pos": "QB", "rookie": false}, {"rank": "QB-34", "adp": "19.08", "name": "D. Watson", "team": "CLE", "bye": "11", "ppg": "2.7", "pos": "QB", "rookie": false}, {"rank": "WR-77", "adp": "19.09", "name": "J. Bech", "team": "LV", "bye": "13", "ppg": "4.4", "pos": "WR", "rookie": false}, {"rank": "WR-124", "adp": "19.11", "name": "M. Fields", "team": "NYG", "bye": "8", "ppg": "2.1", "pos": "WR", "rookie": false}, {"rank": "RB-72", "adp": "19.12", "name": "C. Brooks", "team": "GB", "bye": "11", "ppg": "3.2", "pos": "RB", "rookie": false}, {"rank": "TE-30", "adp": "20.01", "name": "D. Washington", "team": "PIT", "bye": "9", "ppg": "5.0", "pos": "TE", "rookie": false}, {"rank": "RB-90", "adp": "20.02", "name": "O. Gordon", "team": "MIA", "bye": "6", "ppg": "1.8", "pos": "RB", "rookie": false}, {"rank": "RB-58", "adp": "20.03", "name": "D. Giddens", "team": "IND", "bye": "13", "ppg": "4.2", "pos": "RB", "rookie": false}, {"rank": "WR-58", "adp": "20.05", "name": "T. Thornton", "team": "KC", "bye": "5", "ppg": "5.9", "pos": "WR", "rookie": false}, {"rank": "RB-74", "adp": "20.06", "name": "M. Davis", "team": "DAL", "bye": "14", "ppg": "3.0", "pos": "RB", "rookie": false}, {"rank": "QB-66", "adp": "20.09", "name": "C. Beck", "team": "ARI", "bye": "14", "ppg": "0.5", "pos": "QB", "rookie": false}, {"rank": "WR-107", "adp": "20.10", "name": "E. Ayomanor", "team": "TEN", "bye": "9", "ppg": "2.9", "pos": "WR", "rookie": false}, {"rank": "WR-103", "adp": "20.12", "name": "J. Dotson", "team": "ATL", "bye": "11", "ppg": "3.1", "pos": "WR", "rookie": false}, {"rank": "WR-87", "adp": "21.01", "name": "D. Walker", "team": "BAL", "bye": "13", "ppg": "3.7", "pos": "WR", "rookie": false}, {"rank": "WR-170", "adp": "21.02", "name": "S. Bell", "team": "BUF", "bye": "7", "ppg": "0.4", "pos": "WR", "rookie": false}, {"rank": "TE-36", "adp": "21.03", "name": "D. Knox", "team": "BUF", "bye": "7", "ppg": "3.8", "pos": "TE", "rookie": false}, {"rank": "TE-26", "adp": "21.05", "name": "G. Dulcich", "team": "MIA", "bye": "6", "ppg": "5.6", "pos": "TE", "rookie": false}, {"rank": "WR-71", "adp": "21.07", "name": "D. Slayton", "team": "NYG", "bye": "8", "ppg": "4.8", "pos": "WR", "rookie": false}, {"rank": "WR-164", "adp": "21.08", "name": "I. Bond", "team": "CLE", "bye": "11", "ppg": "0.7", "pos": "WR", "rookie": false}, {"rank": "TE-25", "adp": "21.12", "name": "C. Otton", "team": "TB", "bye": "10", "ppg": "5.6", "pos": "TE", "rookie": false}, {"rank": "QB-39", "adp": "22.02", "name": "J. Fields", "team": "KC", "bye": "5", "ppg": "1.6", "pos": "QB", "rookie": false}, {"rank": "WR-89", "adp": "22.03", "name": "D. Wicks", "team": "PHI", "bye": "10", "ppg": "3.6", "pos": "WR", "rookie": false}, {"rank": "TE-32", "adp": "22.05", "name": "C. Parkinson", "team": "LAR", "bye": "11", "ppg": "4.7", "pos": "TE", "rookie": false}, {"rank": "QB-33", "adp": "22.06", "name": "T. Tagovailoa", "team": "ATL", "bye": "11", "ppg": "5.5", "pos": "QB", "rookie": false}, {"rank": "WR-157", "adp": "22.07", "name": "D. Stribling", "team": "SF", "bye": "8", "ppg": "0.8", "pos": "WR", "rookie": false}, {"rank": "WR-159", "adp": "22.08", "name": "T. Hurst", "team": "TB", "bye": "10", "ppg": "0.7", "pos": "WR", "rookie": false}, {"rank": "TE-33", "adp": "22.12", "name": "M. Gesicki", "team": "CIN", "bye": "6", "ppg": "4.1", "pos": "TE", "rookie": false}, {"rank": "WR-127", "adp": "23.02", "name": "K. Coleman", "team": "BUF", "bye": "7", "ppg": "1.9", "pos": "WR", "rookie": false}, {"rank": "RB-81", "adp": "23.03", "name": "E. Demercado", "team": "KC", "bye": "5", "ppg": "2.5", "pos": "RB", "rookie": false}, {"rank": "WR-65", "adp": "23.05", "name": "R. Bateman", "team": "BAL", "bye": "13", "ppg": "4.9", "pos": "WR", "rookie": false}, {"rank": "RB-51", "adp": "23.06", "name": "S. Perine", "team": "CIN", "bye": "6", "ppg": "5.4", "pos": "RB", "rookie": false}, {"rank": "RB-86", "adp": "23.07", "name": "A. Randall", "team": "BAL", "bye": "13", "ppg": "1.9", "pos": "RB", "rookie": false}, {"rank": "WR-118", "adp": "23.08", "name": "T. Horton", "team": "SEA", "bye": "11", "ppg": "2.5", "pos": "WR", "rookie": false}, {"rank": "QB-32", "adp": "23.09", "name": "M. Penix Jr.", "team": "ATL", "bye": "11", "ppg": "8.9", "pos": "QB", "rookie": false}, {"rank": "TE-43", "adp": "23.10", "name": "T. Johnson", "team": "NYG", "bye": "8", "ppg": "3.0", "pos": "TE", "rookie": false}, {"rank": "RB-101", "adp": "23.11", "name": "L. Allen", "team": "JAX", "bye": "7", "ppg": "1.3", "pos": "RB", "rookie": false}, {"rank": "RB-49", "adp": "23.12", "name": "T. Johnson", "team": "BUF", "bye": "7", "ppg": "5.6", "pos": "RB", "rookie": false}, {"rank": "WR-108", "adp": "24.01", "name": "E. Sarratt", "team": "BAL", "bye": "13", "ppg": "2.9", "pos": "WR", "rookie": false}, {"rank": "WR-110", "adp": "24.02", "name": "C. Brazzell II", "team": "CAR", "bye": "5", "ppg": "2.8", "pos": "WR", "rookie": false}, {"rank": "WR-90", "adp": "24.03", "name": "D. Vele", "team": "NO", "bye": "8", "ppg": "3.6", "pos": "WR", "rookie": false}, {"rank": "WR-83", "adp": "24.05", "name": "H. Brown", "team": "PHI", "bye": "10", "ppg": "4.0", "pos": "WR", "rookie": false}, {"rank": "WR-100", "adp": "24.06", "name": "J. Lane", "team": "BAL", "bye": "13", "ppg": "3.2", "pos": "WR", "rookie": false}, {"rank": "TE-38", "adp": "24.07", "name": "M. Mayer", "team": "LV", "bye": "13", "ppg": "3.7", "pos": "TE", "rookie": false}, {"rank": "WR-72", "adp": "24.08", "name": "A. Iosivas", "team": "CIN", "bye": "6", "ppg": "4.7", "pos": "WR", "rookie": false}, {"rank": "TE-46", "adp": "24.09", "name": "J. Sanders", "team": "CAR", "bye": "5", "ppg": "2.7", "pos": "TE", "rookie": false}, {"rank": "RB-66", "adp": "24.10", "name": "I. Davis", "team": "NYJ", "bye": "13", "ppg": "3.7", "pos": "RB", "rookie": false}, {"rank": "QB-41", "adp": "24.11", "name": "J. McCarthy", "team": "MIN", "bye": "6", "ppg": "1.6", "pos": "QB", "rookie": false}, {"rank": "RB-99", "adp": "24.12", "name": "K. Johnson", "team": "PIT", "bye": "9", "ppg": "1.4", "pos": "RB", "rookie": false}, {"rank": "TE-37", "adp": "25.01", "name": "C. Kmet", "team": "CHI", "bye": "10", "ppg": "3.7", "pos": "TE", "rookie": false}, {"rank": "WR-167", "adp": "25.02", "name": "B. Lance", "team": "NO", "bye": "8", "ppg": "0.6", "pos": "WR", "rookie": false}, {"rank": "RB-112", "adp": "25.03", "name": "E. Heidenreich", "team": "PIT", "bye": "9", "ppg": "0.5", "pos": "RB", "rookie": false}, {"rank": "K-1", "adp": "25.04", "name": "B. Aubrey", "team": "DAL", "bye": "14", "ppg": "9.3", "pos": "K", "rookie": false}, {"rank": "K-2", "adp": "25.05", "name": "K. Fairbairn", "team": "HOU", "bye": "8", "ppg": "9.2", "pos": "K", "rookie": false}, {"rank": "K-3", "adp": "25.06", "name": "C. Dicker", "team": "LAC", "bye": "7", "ppg": "9.2", "pos": "K", "rookie": false}, {"rank": "K-4", "adp": "25.07", "name": "J. Myers", "team": "SEA", "bye": "11", "ppg": "8.6", "pos": "K", "rookie": false}, {"rank": "K-14", "adp": "25.08", "name": "C. Little", "team": "JAX", "bye": "7", "ppg": "7.7", "pos": "K", "rookie": false}, {"rank": "K-11", "adp": "25.09", "name": "E. Pineiro", "team": "SF", "bye": "8", "ppg": "7.8", "pos": "K", "rookie": false}, {"rank": "K-13", "adp": "25.10", "name": "T. Loop", "team": "BAL", "bye": "13", "ppg": "7.7", "pos": "K", "rookie": false}, {"rank": "K-15", "adp": "25.12", "name": "E. McPherson", "team": "CIN", "bye": "6", "ppg": "7.6", "pos": "K", "rookie": false}, {"rank": "QB-36", "adp": "--", "name": "M. Jones", "team": "SF", "bye": "8", "ppg": "1.9", "pos": "QB", "rookie": false}, {"rank": "QB-37", "adp": "--", "name": "J. Flacco", "team": "CIN", "bye": "6", "ppg": "1.8", "pos": "QB", "rookie": false}, {"rank": "QB-38", "adp": "--", "name": "T. Lance", "team": "LAC", "bye": "7", "ppg": "1.7", "pos": "QB", "rookie": false}, {"rank": "QB-40", "adp": "--", "name": "A. Richardson", "team": "IND", "bye": "13", "ppg": "1.6", "pos": "QB", "rookie": false}, {"rank": "QB-42", "adp": "--", "name": "M. Mariota", "team": "WAS", "bye": "7", "ppg": "1.6", "pos": "QB", "rookie": false}, {"rank": "QB-43", "adp": "--", "name": "T. Bagent", "team": "CHI", "bye": "10", "ppg": "1.4", "pos": "QB", "rookie": false}, {"rank": "QB-44", "adp": "--", "name": "T. Simpson", "team": "LAR", "bye": "11", "ppg": "1.4", "pos": "QB", "rookie": false}, {"rank": "QB-45", "adp": "--", "name": "T. Bridgewater", "team": "DET", "bye": "6", "ppg": "1.3", "pos": "QB", "rookie": false}, {"rank": "QB-46", "adp": "--", "name": "S. Howell", "team": "DAL", "bye": "14", "ppg": "1.3", "pos": "QB", "rookie": false}, {"rank": "QB-47", "adp": "--", "name": "D. Mills", "team": "HOU", "bye": "8", "ppg": "1.3", "pos": "QB", "rookie": false}, {"rank": "QB-48", "adp": "--", "name": "N. Mullens", "team": "JAX", "bye": "7", "ppg": "1.2", "pos": "QB", "rookie": false}, {"rank": "QB-49", "adp": "--", "name": "T. Taylor", "team": "GB", "bye": "11", "ppg": "1.2", "pos": "QB", "rookie": false}, {"rank": "QB-50", "adp": "--", "name": "T. DeVito", "team": "NE", "bye": "11", "ppg": "1.2", "pos": "QB", "rookie": false}, {"rank": "QB-51", "adp": "--", "name": "T. Huntley", "team": "BAL", "bye": "13", "ppg": "1.2", "pos": "QB", "rookie": false}, {"rank": "QB-52", "adp": "--", "name": "K. Allen", "team": "BUF", "bye": "7", "ppg": "1.2", "pos": "QB", "rookie": false}, {"rank": "QB-53", "adp": "--", "name": "D. Lock", "team": "SEA", "bye": "11", "ppg": "1.2", "pos": "QB", "rookie": false}, {"rank": "QB-54", "adp": "--", "name": "S. Rattler", "team": "NO", "bye": "8", "ppg": "1.2", "pos": "QB", "rookie": false}, {"rank": "QB-55", "adp": "--", "name": "G. Minshew", "team": "ARI", "bye": "14", "ppg": "1.2", "pos": "QB", "rookie": false}, {"rank": "QB-56", "adp": "--", "name": "M. Rudolph", "team": "PIT", "bye": "9", "ppg": "1.2", "pos": "QB", "rookie": false}, {"rank": "QB-57", "adp": "--", "name": "J. Browning", "team": "TB", "bye": "10", "ppg": "1.1", "pos": "QB", "rookie": false}, {"rank": "QB-58", "adp": "--", "name": "J. Stidham", "team": "DEN", "bye": "10", "ppg": "1.1", "pos": "QB", "rookie": false}, {"rank": "QB-59", "adp": "--", "name": "D. Gabriel", "team": "CLE", "bye": "11", "ppg": "1.1", "pos": "QB", "rookie": false}, {"rank": "QB-60", "adp": "--", "name": "K. Pickett", "team": "CAR", "bye": "5", "ppg": "1.0", "pos": "QB", "rookie": false}, {"rank": "QB-61", "adp": "--", "name": "A. Dalton", "team": "PHI", "bye": "10", "ppg": "1.0", "pos": "QB", "rookie": false}, {"rank": "QB-62", "adp": "--", "name": "C. Klubnik", "team": "NYJ", "bye": "13", "ppg": "1.0", "pos": "QB", "rookie": false}, {"rank": "QB-63", "adp": "--", "name": "M. Trubisky", "team": "TEN", "bye": "9", "ppg": "1.0", "pos": "QB", "rookie": false}, {"rank": "QB-64", "adp": "--", "name": "J. Winston", "team": "NYG", "bye": "8", "ppg": "0.9", "pos": "QB", "rookie": false}, {"rank": "QB-65", "adp": "--", "name": "Q. Ewers", "team": "MIA", "bye": "6", "ppg": "0.9", "pos": "QB", "rookie": false}, {"rank": "RB-53", "adp": "--", "name": "B. Smith", "team": "KC", "bye": "5", "ppg": "4.8", "pos": "RB", "rookie": false}, {"rank": "RB-65", "adp": "--", "name": "R. Ali", "team": "BAL", "bye": "13", "ppg": "3.8", "pos": "RB", "rookie": false}, {"rank": "RB-69", "adp": "--", "name": "Z. Scott", "team": "MIN", "bye": "6", "ppg": "3.5", "pos": "RB", "rookie": false}, {"rank": "RB-71", "adp": "--", "name": "P. Mafah", "team": "DAL", "bye": "14", "ppg": "3.3", "pos": "RB", "rookie": false}, {"rank": "RB-76", "adp": "--", "name": "D. Singletary", "team": "NYG", "bye": "8", "ppg": "2.8", "pos": "RB", "rookie": false}, {"rank": "RB-77", "adp": "--", "name": "J. Jordan", "team": "HOU", "bye": "8", "ppg": "2.7", "pos": "RB", "rookie": false}, {"rank": "RB-79", "adp": "--", "name": "K. Juszczyk", "team": "SF", "bye": "8", "ppg": "2.6", "pos": "RB", "rookie": false}, {"rank": "RB-80", "adp": "--", "name": "K. Miller", "team": "NO", "bye": "8", "ppg": "2.5", "pos": "RB", "rookie": false}, {"rank": "RB-83", "adp": "--", "name": "J. Ford", "team": "WAS", "bye": "7", "ppg": "2.2", "pos": "RB", "rookie": false}, {"rank": "RB-85", "adp": "--", "name": "R. Sanders", "team": "CLE", "bye": "11", "ppg": "1.9", "pos": "RB", "rookie": false}, {"rank": "RB-87", "adp": "--", "name": "J. McNichols", "team": "WAS", "bye": "7", "ppg": "1.9", "pos": "RB", "rookie": false}, {"rank": "RB-88", "adp": "--", "name": "S. McGowan", "team": "IND", "bye": "13", "ppg": "1.8", "pos": "RB", "rookie": false}, {"rank": "RB-89", "adp": "--", "name": "T. Goodson", "team": "ATL", "bye": "11", "ppg": "1.8", "pos": "RB", "rookie": false}, {"rank": "RB-91", "adp": "--", "name": "R. Rivers", "team": "LAR", "bye": "11", "ppg": "1.8", "pos": "RB", "rookie": false}, {"rank": "RB-92", "adp": "--", "name": "T. Brooks", "team": "CIN", "bye": "6", "ppg": "1.7", "pos": "RB", "rookie": false}, {"rank": "RB-93", "adp": "--", "name": "I. Guerendo", "team": "SF", "bye": "8", "ppg": "1.7", "pos": "RB", "rookie": false}, {"rank": "RB-95", "adp": "--", "name": "P. Strong Jr.", "team": "GB", "bye": "11", "ppg": "1.6", "pos": "RB", "rookie": false}, {"rank": "RB-96", "adp": "--", "name": "R. Johnson", "team": "CHI", "bye": "10", "ppg": "1.6", "pos": "RB", "rookie": false}, {"rank": "RB-97", "adp": "--", "name": "J. Miller", "team": "NE", "bye": "11", "ppg": "1.6", "pos": "RB", "rookie": false}, {"rank": "RB-98", "adp": "--", "name": "J. Saylors", "team": "DET", "bye": "6", "ppg": "1.5", "pos": "RB", "rookie": false}, {"rank": "RB-100", "adp": "--", "name": "B. Brown", "team": "CHI", "bye": "10", "ppg": "1.4", "pos": "RB", "rookie": false}, {"rank": "RB-103", "adp": "--", "name": "H. Luepke", "team": "DAL", "bye": "14", "ppg": "1.2", "pos": "RB", "rookie": false}, {"rank": "RB-104", "adp": "--", "name": "T. Etienne", "team": "CAR", "bye": "5", "ppg": "1.1", "pos": "RB", "rookie": false}, {"rank": "RB-105", "adp": "--", "name": "W. Shipley", "team": "PHI", "bye": "10", "ppg": "1.1", "pos": "RB", "rookie": false}, {"rank": "RB-106", "adp": "--", "name": "J. Patterson", "team": "LAC", "bye": "7", "ppg": "1.0", "pos": "RB", "rookie": false}, {"rank": "RB-107", "adp": "--", "name": "L. Larison", "team": "NE", "bye": "11", "ppg": "0.9", "pos": "RB", "rookie": false}, {"rank": "RB-108", "adp": "--", "name": "N. Carter", "team": "ATL", "bye": "11", "ppg": "0.8", "pos": "RB", "rookie": false}, {"rank": "RB-109", "adp": "--", "name": "J. McLaughlin", "team": "DEN", "bye": "10", "ppg": "0.8", "pos": "RB", "rookie": false}, {"rank": "RB-110", "adp": "--", "name": "S. Matlock", "team": "LAC", "bye": "7", "ppg": "0.7", "pos": "RB", "rookie": false}, {"rank": "RB-111", "adp": "--", "name": "T. Jennings", "team": "NE", "bye": "11", "ppg": "0.6", "pos": "RB", "rookie": false}, {"rank": "RB-113", "adp": "--", "name": "D. Laube", "team": "LV", "bye": "13", "ppg": "0.4", "pos": "RB", "rookie": false}, {"rank": "RB-114", "adp": "--", "name": "D. Pierce", "team": "PHI", "bye": "10", "ppg": "0.4", "pos": "RB", "rookie": false}, {"rank": "RB-116", "adp": "--", "name": "M. Carter", "team": "TEN", "bye": "9", "ppg": "0.3", "pos": "RB", "rookie": false}, {"rank": "RB-117", "adp": "--", "name": "F. Gore Jr.", "team": "BUF", "bye": "7", "ppg": "0.3", "pos": "RB", "rookie": false}, {"rank": "RB-119", "adp": "--", "name": "K. Nwangwu", "team": "NYJ", "bye": "13", "ppg": "0.2", "pos": "RB", "rookie": false}, {"rank": "RB-120", "adp": "--", "name": "B. Brooks", "team": "HOU", "bye": "8", "ppg": "0.2", "pos": "RB", "rookie": false}, {"rank": "RB-121", "adp": "--", "name": "J. Williams", "team": "TB", "bye": "10", "ppg": "0.1", "pos": "RB", "rookie": false}, {"rank": "RB-122", "adp": "--", "name": "S. Vaki", "team": "DET", "bye": "6", "ppg": "0.1", "pos": "RB", "rookie": false}, {"rank": "RB-123", "adp": "--", "name": "J. Chestnut", "team": "TEN", "bye": "9", "ppg": "0.1", "pos": "RB", "rookie": false}, {"rank": "WR-75", "adp": "--", "name": "C. Douglas", "team": "MIA", "bye": "6", "ppg": "4.5", "pos": "WR", "rookie": false}, {"rank": "WR-78", "adp": "--", "name": "X. Legette", "team": "CAR", "bye": "5", "ppg": "4.3", "pos": "WR", "rookie": false}, {"rank": "WR-80", "adp": "--", "name": "A. Dulin", "team": "IND", "bye": "13", "ppg": "4.2", "pos": "WR", "rookie": false}, {"rank": "WR-81", "adp": "--", "name": "K. Turpin", "team": "DAL", "bye": "14", "ppg": "4.2", "pos": "WR", "rookie": false}, {"rank": "WR-82", "adp": "--", "name": "J. Palmer", "team": "BUF", "bye": "7", "ppg": "4.1", "pos": "WR", "rookie": false}, {"rank": "WR-88", "adp": "--", "name": "T. Burks", "team": "WAS", "bye": "7", "ppg": "3.6", "pos": "WR", "rookie": false}, {"rank": "WR-91", "adp": "--", "name": "L. McCaffrey", "team": "WAS", "bye": "7", "ppg": "3.6", "pos": "WR", "rookie": false}, {"rank": "WR-92", "adp": "--", "name": "J. Tolbert", "team": "MIA", "bye": "6", "ppg": "3.5", "pos": "WR", "rookie": false}, {"rank": "WR-96", "adp": "--", "name": "O. Zaccheaus", "team": "ATL", "bye": "11", "ppg": "3.3", "pos": "WR", "rookie": false}, {"rank": "WR-97", "adp": "--", "name": "K. Bourne", "team": "ARI", "bye": "14", "ppg": "3.3", "pos": "WR", "rookie": false}, {"rank": "WR-98", "adp": "--", "name": "J. Whittington", "team": "LAR", "bye": "11", "ppg": "3.2", "pos": "WR", "rookie": false}, {"rank": "WR-101", "adp": "--", "name": "M. Mims", "team": "DEN", "bye": "10", "ppg": "3.2", "pos": "WR", "rookie": false}, {"rank": "WR-102", "adp": "--", "name": "K. Raymond", "team": "CHI", "bye": "10", "ppg": "3.1", "pos": "WR", "rookie": false}, {"rank": "WR-104", "adp": "--", "name": "T. Johnson", "team": "TB", "bye": "10", "ppg": "3.1", "pos": "WR", "rookie": false}, {"rank": "WR-106", "adp": "--", "name": "G. Dortch", "team": "DET", "bye": "6", "ppg": "2.9", "pos": "WR", "rookie": false}, {"rank": "WR-109", "adp": "--", "name": "D. Burks", "team": "IND", "bye": "13", "ppg": "2.9", "pos": "WR", "rookie": false}, {"rank": "WR-111", "adp": "--", "name": "T. Atwell", "team": "MIA", "bye": "6", "ppg": "2.7", "pos": "WR", "rookie": false}, {"rank": "WR-112", "adp": "--", "name": "J. Metchie", "team": "CAR", "bye": "5", "ppg": "2.7", "pos": "WR", "rookie": false}, {"rank": "WR-113", "adp": "--", "name": "R. Wilson", "team": "PIT", "bye": "9", "ppg": "2.6", "pos": "WR", "rookie": false}, {"rank": "WR-114", "adp": "--", "name": "M. Tinsley", "team": "CIN", "bye": "6", "ppg": "2.6", "pos": "WR", "rookie": false}, {"rank": "WR-115", "adp": "--", "name": "M. Hollins", "team": "NE", "bye": "11", "ppg": "2.6", "pos": "WR", "rookie": false}, {"rank": "WR-116", "adp": "--", "name": "X. Hutchinson", "team": "HOU", "bye": "8", "ppg": "2.5", "pos": "WR", "rookie": false}, {"rank": "WR-117", "adp": "--", "name": "J. Royals", "team": "KC", "bye": "5", "ppg": "2.5", "pos": "WR", "rookie": false}, {"rank": "WR-121", "adp": "--", "name": "T. Patrick", "team": "NYJ", "bye": "13", "ppg": "2.3", "pos": "WR", "rookie": false}, {"rank": "WR-122", "adp": "--", "name": "D. Brown", "team": "WAS", "bye": "7", "ppg": "2.3", "pos": "WR", "rookie": false}, {"rank": "WR-123", "adp": "--", "name": "D. Robinson", "team": "SF", "bye": "8", "ppg": "2.1", "pos": "WR", "rookie": false}, {"rank": "WR-125", "adp": "--", "name": "D. Douglas", "team": "NE", "bye": "11", "ppg": "1.9", "pos": "WR", "rookie": false}, {"rank": "WR-126", "adp": "--", "name": "K. Mumpfield", "team": "LAR", "bye": "11", "ppg": "1.9", "pos": "WR", "rookie": false}, {"rank": "WR-129", "adp": "--", "name": "S. Williams", "team": "GB", "bye": "11", "ppg": "1.8", "pos": "WR", "rookie": false}, {"rank": "WR-130", "adp": "--", "name": "J. Walker", "team": "CHI", "bye": "10", "ppg": "1.8", "pos": "WR", "rookie": false}, {"rank": "WR-131", "adp": "--", "name": "D. Thornton", "team": "LV", "bye": "13", "ppg": "1.8", "pos": "WR", "rookie": false}, {"rank": "WR-132", "adp": "--", "name": "B. Thompson", "team": "LAC", "bye": "7", "ppg": "1.7", "pos": "WR", "rookie": false}, {"rank": "WR-133", "adp": "--", "name": "C. Young", "team": "CIN", "bye": "6", "ppg": "1.7", "pos": "WR", "rookie": false}, {"rank": "WR-134", "adp": "--", "name": "C. Tillman", "team": "CLE", "bye": "11", "ppg": "1.7", "pos": "WR", "rookie": false}, {"rank": "WR-135", "adp": "--", "name": "N. Westbrook-Ikhine", "team": "IND", "bye": "13", "ppg": "1.7", "pos": "WR", "rookie": false}, {"rank": "WR-136", "adp": "--", "name": "J. Mingo", "team": "DAL", "bye": "14", "ppg": "1.6", "pos": "WR", "rookie": false}, {"rank": "WR-137", "adp": "--", "name": "K. Williams", "team": "NE", "bye": "11", "ppg": "1.5", "pos": "WR", "rookie": false}, {"rank": "WR-138", "adp": "--", "name": "D. Cooper", "team": "PHI", "bye": "10", "ppg": "1.3", "pos": "WR", "rookie": false}, {"rank": "WR-139", "adp": "--", "name": "J. Cameron", "team": "JAX", "bye": "7", "ppg": "1.3", "pos": "WR", "rookie": false}, {"rank": "WR-140", "adp": "--", "name": "Z. Thomas", "team": "CHI", "bye": "10", "ppg": "1.3", "pos": "WR", "rookie": false}, {"rank": "WR-141", "adp": "--", "name": "B. Skowronek", "team": "PIT", "bye": "9", "ppg": "1.3", "pos": "WR", "rookie": false}, {"rank": "WR-142", "adp": "--", "name": "J. Lane", "team": "WAS", "bye": "7", "ppg": "1.2", "pos": "WR", "rookie": false}, {"rank": "WR-143", "adp": "--", "name": "J. Horn", "team": "CAR", "bye": "5", "ppg": "1.2", "pos": "WR", "rookie": false}, {"rank": "WR-144", "adp": "--", "name": "M. Valdes-Scantling", "team": "DAL", "bye": "14", "ppg": "1.1", "pos": "WR", "rookie": false}, {"rank": "WR-145", "adp": "--", "name": "X. Smith", "team": "LAR", "bye": "11", "ppg": "1.1", "pos": "WR", "rookie": false}, {"rank": "WR-146", "adp": "--", "name": "C. Daniels", "team": "LAR", "bye": "11", "ppg": "1.0", "pos": "WR", "rookie": false}, {"rank": "WR-147", "adp": "--", "name": "C. Austin III", "team": "NYG", "bye": "8", "ppg": "1.0", "pos": "WR", "rookie": false}, {"rank": "WR-148", "adp": "--", "name": "T. Felton", "team": "MIN", "bye": "6", "ppg": "1.0", "pos": "WR", "rookie": false}, {"rank": "WR-149", "adp": "--", "name": "M. Corley", "team": "CLE", "bye": "11", "ppg": "1.0", "pos": "WR", "rookie": false}, {"rank": "WR-150", "adp": "--", "name": "J. Richardson", "team": "CHI", "bye": "10", "ppg": "1.0", "pos": "WR", "rookie": false}, {"rank": "WR-151", "adp": "--", "name": "M. Tipton", "team": "NO", "bye": "8", "ppg": "0.9", "pos": "WR", "rookie": false}, {"rank": "WR-152", "adp": "--", "name": "J. Jones", "team": "MIN", "bye": "6", "ppg": "0.9", "pos": "WR", "rookie": false}, {"rank": "WR-153", "adp": "--", "name": "J. Watson", "team": "HOU", "bye": "8", "ppg": "0.9", "pos": "WR", "rookie": false}, {"rank": "WR-154", "adp": "--", "name": "X. Weaver", "team": "ARI", "bye": "14", "ppg": "0.8", "pos": "WR", "rookie": false}, {"rank": "WR-155", "adp": "--", "name": "T. Kennedy", "team": "DET", "bye": "6", "ppg": "0.8", "pos": "WR", "rookie": false}, {"rank": "WR-156", "adp": "--", "name": "T. Shavers", "team": "BUF", "bye": "7", "ppg": "0.8", "pos": "WR", "rookie": false}, {"rank": "WR-158", "adp": "--", "name": "I. Williams", "team": "NYJ", "bye": "13", "ppg": "0.7", "pos": "WR", "rookie": false}, {"rank": "WR-160", "adp": "--", "name": "M. Benson", "team": "LV", "bye": "13", "ppg": "0.7", "pos": "WR", "rookie": false}, {"rank": "WR-161", "adp": "--", "name": "K. Coleman", "team": "MIA", "bye": "6", "ppg": "0.7", "pos": "WR", "rookie": false}, {"rank": "WR-162", "adp": "--", "name": "D. Davis", "team": "LAC", "bye": "7", "ppg": "0.7", "pos": "WR", "rookie": false}, {"rank": "WR-163", "adp": "--", "name": "B. Melton", "team": "GB", "bye": "11", "ppg": "0.7", "pos": "WR", "rookie": false}, {"rank": "WR-165", "adp": "--", "name": "L. Humphrey", "team": "DEN", "bye": "10", "ppg": "0.6", "pos": "WR", "rookie": false}, {"rank": "WR-166", "adp": "--", "name": "I. Hodgins", "team": "NYG", "bye": "8", "ppg": "0.6", "pos": "WR", "rookie": false}, {"rank": "WR-168", "adp": "--", "name": "M. Bandy", "team": "DEN", "bye": "10", "ppg": "0.5", "pos": "WR", "rookie": false}, {"rank": "WR-169", "adp": "--", "name": "K. Lambert-Smith", "team": "LAC", "bye": "7", "ppg": "0.4", "pos": "WR", "rookie": false}, {"rank": "WR-171", "adp": "--", "name": "N. Remigio", "team": "KC", "bye": "5", "ppg": "0.4", "pos": "WR", "rookie": false}, {"rank": "WR-172", "adp": "--", "name": "A. Gould", "team": "IND", "bye": "13", "ppg": "0.4", "pos": "WR", "rookie": false}, {"rank": "WR-173", "adp": "--", "name": "J. Watkins", "team": "SF", "bye": "8", "ppg": "0.4", "pos": "WR", "rookie": false}, {"rank": "WR-174", "adp": "--", "name": "C. Allen", "team": "KC", "bye": "5", "ppg": "0.3", "pos": "WR", "rookie": false}, {"rank": "WR-175", "adp": "--", "name": "K. Wetjen", "team": "PIT", "bye": "9", "ppg": "0.3", "pos": "WR", "rookie": false}, {"rank": "WR-176", "adp": "--", "name": "K. Johnson", "team": "TB", "bye": "10", "ppg": "0.3", "pos": "WR", "rookie": false}, {"rank": "WR-177", "adp": "--", "name": "J. Bobo", "team": "SEA", "bye": "11", "ppg": "0.3", "pos": "WR", "rookie": false}, {"rank": "WR-178", "adp": "--", "name": "D. Thompkins", "team": "BUF", "bye": "7", "ppg": "0.3", "pos": "WR", "rookie": false}, {"rank": "WR-179", "adp": "--", "name": "D. Duvernay", "team": "ARI", "bye": "14", "ppg": "0.3", "pos": "WR", "rookie": false}, {"rank": "WR-180", "adp": "--", "name": "S. Moore", "team": "GB", "bye": "11", "ppg": "0.2", "pos": "WR", "rookie": false}, {"rank": "WR-181", "adp": "--", "name": "M. Price", "team": "MIN", "bye": "6", "ppg": "0.2", "pos": "WR", "rookie": false}, {"rank": "WR-182", "adp": "--", "name": "E. Henderson", "team": "SEA", "bye": "11", "ppg": "0.2", "pos": "WR", "rookie": false}, {"rank": "WR-183", "adp": "--", "name": "B. Oliver", "team": "TEN", "bye": "9", "ppg": "0.1", "pos": "WR", "rookie": false}, {"rank": "WR-184", "adp": "--", "name": "K. Williams", "team": "CIN", "bye": "6", "ppg": "0.1", "pos": "WR", "rookie": false}, {"rank": "TE-39", "adp": "--", "name": "T. Higbee", "team": "LAR", "bye": "11", "ppg": "3.6", "pos": "TE", "rookie": false}, {"rank": "TE-41", "adp": "--", "name": "J. Oliver", "team": "MIN", "bye": "6", "ppg": "3.4", "pos": "TE", "rookie": false}, {"rank": "TE-42", "adp": "--", "name": "A. Hooper", "team": "ATL", "bye": "11", "ppg": "3.1", "pos": "TE", "rookie": false}, {"rank": "TE-44", "adp": "--", "name": "N. Fant", "team": "NO", "bye": "8", "ppg": "2.9", "pos": "TE", "rookie": false}, {"rank": "TE-45", "adp": "--", "name": "N. Gray", "team": "KC", "bye": "5", "ppg": "2.7", "pos": "TE", "rookie": false}, {"rank": "TE-47", "adp": "--", "name": "B. Wright", "team": "DET", "bye": "6", "ppg": "2.7", "pos": "TE", "rookie": false}, {"rank": "TE-48", "adp": "--", "name": "T. Hudson", "team": "CIN", "bye": "6", "ppg": "2.5", "pos": "TE", "rookie": false}, {"rank": "TE-49", "adp": "--", "name": "T. Tremble", "team": "CAR", "bye": "5", "ppg": "2.5", "pos": "TE", "rookie": false}, {"rank": "TE-50", "adp": "--", "name": "E. Arroyo", "team": "SEA", "bye": "11", "ppg": "2.5", "pos": "TE", "rookie": false}, {"rank": "TE-51", "adp": "--", "name": "L. Musgrave", "team": "GB", "bye": "11", "ppg": "2.3", "pos": "TE", "rookie": false}, {"rank": "TE-52", "adp": "--", "name": "E. Higgins", "team": "ARI", "bye": "14", "ppg": "2.2", "pos": "TE", "rookie": false}, {"rank": "TE-53", "adp": "--", "name": "M. Evans", "team": "CAR", "bye": "5", "ppg": "2.1", "pos": "TE", "rookie": false}, {"rank": "TE-55", "adp": "--", "name": "J. Hawes", "team": "BUF", "bye": "7", "ppg": "1.9", "pos": "TE", "rookie": false}, {"rank": "TE-56", "adp": "--", "name": "F. Moreau", "team": "HOU", "bye": "8", "ppg": "1.7", "pos": "TE", "rookie": false}, {"rank": "TE-57", "adp": "--", "name": "D. Smythe", "team": "BAL", "bye": "13", "ppg": "1.6", "pos": "TE", "rookie": false}, {"rank": "TE-58", "adp": "--", "name": "A. Trautman", "team": "DEN", "bye": "10", "ppg": "1.5", "pos": "TE", "rookie": false}, {"rank": "TE-59", "adp": "--", "name": "B. Sinnott", "team": "WAS", "bye": "7", "ppg": "1.5", "pos": "TE", "rookie": false}, {"rank": "TE-60", "adp": "--", "name": "I. Thomas", "team": "LV", "bye": "13", "ppg": "1.5", "pos": "TE", "rookie": false}, {"rank": "TE-61", "adp": "--", "name": "D. Sample", "team": "CIN", "bye": "6", "ppg": "1.4", "pos": "TE", "rookie": false}, {"rank": "TE-62", "adp": "--", "name": "L. Schoonmaker", "team": "DAL", "bye": "14", "ppg": "1.4", "pos": "TE", "rookie": false}, {"rank": "TE-63", "adp": "--", "name": "D. Bellinger", "team": "TEN", "bye": "9", "ppg": "1.4", "pos": "TE", "rookie": false}, {"rank": "TE-64", "adp": "--", "name": "W. Kacmarek", "team": "MIA", "bye": "6", "ppg": "1.3", "pos": "TE", "rookie": false}, {"rank": "TE-65", "adp": "--", "name": "M. Alie-Cox", "team": "IND", "bye": "13", "ppg": "1.2", "pos": "TE", "rookie": false}, {"rank": "TE-66", "adp": "--", "name": "J. Hill", "team": "NE", "bye": "11", "ppg": "1.2", "pos": "TE", "rookie": false}, {"rank": "TE-67", "adp": "--", "name": "D. Allen", "team": "LAR", "bye": "11", "ppg": "1.2", "pos": "TE", "rookie": false}, {"rank": "TE-68", "adp": "--", "name": "W. Mallory", "team": "IND", "bye": "13", "ppg": "1.1", "pos": "TE", "rookie": false}, {"rank": "TE-69", "adp": "--", "name": "J. Whyle", "team": "GB", "bye": "11", "ppg": "1.1", "pos": "TE", "rookie": false}, {"rank": "TE-70", "adp": "--", "name": "O. Delp", "team": "NO", "bye": "8", "ppg": "1.1", "pos": "TE", "rookie": false}, {"rank": "TE-71", "adp": "--", "name": "B. Spann-Ford", "team": "DAL", "bye": "14", "ppg": "1.1", "pos": "TE", "rookie": false}, {"rank": "TE-72", "adp": "--", "name": "J. Joly", "team": "DEN", "bye": "10", "ppg": "1.1", "pos": "TE", "rookie": false}, {"rank": "TE-73", "adp": "--", "name": "S. Traore", "team": "MIA", "bye": "6", "ppg": "1.1", "pos": "TE", "rookie": false}, {"rank": "TE-74", "adp": "--", "name": "E. All", "team": "CIN", "bye": "6", "ppg": "1.0", "pos": "TE", "rookie": false}, {"rank": "TE-75", "adp": "--", "name": "N. Boerkircher", "team": "JAX", "bye": "7", "ppg": "1.0", "pos": "TE", "rookie": false}, {"rank": "TE-76", "adp": "--", "name": "L. Farrell", "team": "SF", "bye": "8", "ppg": "1.0", "pos": "TE", "rookie": false}, {"rank": "TE-77", "adp": "--", "name": "R. Nowakowski", "team": "PIT", "bye": "9", "ppg": "1.0", "pos": "TE", "rookie": false}, {"rank": "TE-78", "adp": "--", "name": "K. Latu", "team": "BUF", "bye": "7", "ppg": "1.0", "pos": "TE", "rookie": false}, {"rank": "TE-79", "adp": "--", "name": "C. Stover", "team": "HOU", "bye": "8", "ppg": "1.0", "pos": "TE", "rookie": false}, {"rank": "TE-80", "adp": "--", "name": "J. Mitchell", "team": "CAR", "bye": "5", "ppg": "0.9", "pos": "TE", "rookie": false}, {"rank": "TE-81", "adp": "--", "name": "J. Bates", "team": "WAS", "bye": "7", "ppg": "0.7", "pos": "TE", "rookie": false}, {"rank": "TE-82", "adp": "--", "name": "M. Hibner", "team": "BAL", "bye": "13", "ppg": "0.7", "pos": "TE", "rookie": false}, {"rank": "TE-83", "adp": "--", "name": "E. Saubert", "team": "SEA", "bye": "11", "ppg": "0.6", "pos": "TE", "rookie": false}, {"rank": "TE-84", "adp": "--", "name": "T. Reiman", "team": "ARI", "bye": "14", "ppg": "0.6", "pos": "TE", "rookie": false}, {"rank": "TE-85", "adp": "--", "name": "A. Ogletree", "team": "IND", "bye": "13", "ppg": "0.6", "pos": "TE", "rookie": false}, {"rank": "TE-86", "adp": "--", "name": "E. Raridon", "team": "NE", "bye": "11", "ppg": "0.6", "pos": "TE", "rookie": false}, {"rank": "TE-87", "adp": "--", "name": "P. Durham", "team": "TB", "bye": "10", "ppg": "0.6", "pos": "TE", "rookie": false}, {"rank": "TE-88", "adp": "--", "name": "K. Granson", "team": "TEN", "bye": "9", "ppg": "0.6", "pos": "TE", "rookie": false}, {"rank": "TE-89", "adp": "--", "name": "C. Woerner", "team": "ATL", "bye": "11", "ppg": "0.6", "pos": "TE", "rookie": false}, {"rank": "TE-90", "adp": "--", "name": "J. Ruckert", "team": "NYJ", "bye": "13", "ppg": "0.5", "pos": "TE", "rookie": false}, {"rank": "TE-91", "adp": "--", "name": "T. Conklin", "team": "DET", "bye": "6", "ppg": "0.5", "pos": "TE", "rookie": false}, {"rank": "TE-92", "adp": "--", "name": "N. Adkins", "team": "DEN", "bye": "10", "ppg": "0.5", "pos": "TE", "rookie": false}, {"rank": "TE-93", "adp": "--", "name": "G. Calcaterra", "team": "PHI", "bye": "10", "ppg": "0.5", "pos": "TE", "rookie": false}, {"rank": "TE-94", "adp": "--", "name": "B. Whiteheart", "team": "CLE", "bye": "11", "ppg": "0.4", "pos": "TE", "rookie": false}, {"rank": "TE-95", "adp": "--", "name": "J. Wiley", "team": "KC", "bye": "5", "ppg": "0.4", "pos": "TE", "rookie": false}, {"rank": "TE-96", "adp": "--", "name": "S. Roush", "team": "CHI", "bye": "10", "ppg": "0.4", "pos": "TE", "rookie": false}, {"rank": "TE-97", "adp": "--", "name": "J. Endries", "team": "CIN", "bye": "6", "ppg": "0.4", "pos": "TE", "rookie": false}, {"rank": "TE-98", "adp": "--", "name": "M. Matavao", "team": "NO", "bye": "8", "ppg": "0.4", "pos": "TE", "rookie": false}, {"rank": "TE-99", "adp": "--", "name": "B. Sims", "team": "MIA", "bye": "6", "ppg": "0.4", "pos": "TE", "rookie": false}, {"rank": "TE-100", "adp": "--", "name": "B. Yurosek", "team": "MIN", "bye": "6", "ppg": "0.3", "pos": "TE", "rookie": false}, {"rank": "TE-101", "adp": "--", "name": "D. Culp", "team": "TB", "bye": "10", "ppg": "0.2", "pos": "TE", "rookie": false}, {"rank": "TE-102", "adp": "--", "name": "J. Royer", "team": "CLE", "bye": "11", "ppg": "0.2", "pos": "TE", "rookie": false}, {"rank": "TE-103", "adp": "--", "name": "C. Manhertz", "team": "NYG", "bye": "8", "ppg": "0.1", "pos": "TE", "rookie": false}, {"rank": "K-5", "adp": "--", "name": "H. Mevis", "team": "LAR", "bye": "11", "ppg": "7.9", "pos": "K", "rookie": false}, {"rank": "K-6", "adp": "--", "name": "C. Boswell", "team": "PIT", "bye": "9", "ppg": "7.9", "pos": "K", "rookie": false}, {"rank": "K-7", "adp": "--", "name": "C. McLaughlin", "team": "TB", "bye": "10", "ppg": "7.8", "pos": "K", "rookie": false}, {"rank": "K-8", "adp": "--", "name": "C. Santos", "team": "CHI", "bye": "10", "ppg": "7.8", "pos": "K", "rookie": false}, {"rank": "K-9", "adp": "--", "name": "A. Borregales", "team": "NE", "bye": "11", "ppg": "7.8", "pos": "K", "rookie": false}, {"rank": "K-10", "adp": "--", "name": "W. Lutz", "team": "DEN", "bye": "10", "ppg": "7.8", "pos": "K", "rookie": false}, {"rank": "K-12", "adp": "--", "name": "J. Bates", "team": "DET", "bye": "6", "ppg": "7.7", "pos": "K", "rookie": false}, {"rank": "K-16", "adp": "--", "name": "T. Smack", "team": "GB", "bye": "11", "ppg": "7.6", "pos": "K", "rookie": false}, {"rank": "K-17", "adp": "--", "name": "W. Reichard", "team": "MIN", "bye": "6", "ppg": "7.4", "pos": "K", "rookie": false}, {"rank": "K-18", "adp": "--", "name": "N. Folk", "team": "ATL", "bye": "11", "ppg": "7.3", "pos": "K", "rookie": false}, {"rank": "K-19", "adp": "--", "name": "J. Moody", "team": "WAS", "bye": "7", "ppg": "7.2", "pos": "K", "rookie": false}, {"rank": "K-20", "adp": "--", "name": "H. Butker", "team": "KC", "bye": "5", "ppg": "7.2", "pos": "K", "rookie": false}, {"rank": "K-21", "adp": "--", "name": "T. Bass", "team": "BUF", "bye": "7", "ppg": "7.2", "pos": "K", "rookie": false}, {"rank": "K-22", "adp": "--", "name": "C. Smyth", "team": "NO", "bye": "8", "ppg": "7.2", "pos": "K", "rookie": false}, {"rank": "K-23", "adp": "--", "name": "R. Fitzgerald", "team": "CAR", "bye": "5", "ppg": "7.1", "pos": "K", "rookie": false}, {"rank": "K-24", "adp": "--", "name": "J. Slye", "team": "TEN", "bye": "9", "ppg": "7.0", "pos": "K", "rookie": false}, {"rank": "K-25", "adp": "--", "name": "S. Shrader", "team": "IND", "bye": "13", "ppg": "7.0", "pos": "K", "rookie": false}, {"rank": "K-26", "adp": "--", "name": "Z. Gonzalez", "team": "MIA", "bye": "6", "ppg": "7.0", "pos": "K", "rookie": false}, {"rank": "K-27", "adp": "--", "name": "M. Gay", "team": "LV", "bye": "13", "ppg": "6.9", "pos": "K", "rookie": false}, {"rank": "K-28", "adp": "--", "name": "C. Ryland", "team": "ARI", "bye": "14", "ppg": "6.8", "pos": "K", "rookie": false}, {"rank": "K-29", "adp": "--", "name": "A. Szmyt", "team": "CLE", "bye": "11", "ppg": "6.8", "pos": "K", "rookie": false}, {"rank": "K-30", "adp": "--", "name": "J. Elliott", "team": "PHI", "bye": "10", "ppg": "6.8", "pos": "K", "rookie": false}, {"rank": "K-31", "adp": "--", "name": "B. Sauls", "team": "NYG", "bye": "8", "ppg": "3.7", "pos": "K", "rookie": false}, {"rank": "K-32", "adp": "--", "name": "D. Zvada", "team": "NYG", "bye": "8", "ppg": "3.7", "pos": "K", "rookie": false}, {"rank": "K-33", "adp": "--", "name": "J. Sanders", "team": "NYJ", "bye": "13", "ppg": "3.5", "pos": "K", "rookie": false}, {"rank": "K-34", "adp": "--", "name": "C. York", "team": "NYJ", "bye": "13", "ppg": "3.5", "pos": "K", "rookie": false}, {"rank": "K-35", "adp": "--", "name": "B. Grupe", "team": "IND", "bye": "13", "ppg": "0.8", "pos": "K", "rookie": false}, {"rank": "DST-1", "adp": "--", "name": "Arizona D/ST", "team": "ARI", "bye": "-", "ppg": "-", "pos": "DST", "rookie": false}, {"rank": "DST-2", "adp": "--", "name": "Atlanta D/ST", "team": "ATL", "bye": "-", "ppg": "-", "pos": "DST", "rookie": false}, {"rank": "DST-3", "adp": "--", "name": "Baltimore D/ST", "team": "BAL", "bye": "-", "ppg": "-", "pos": "DST", "rookie": false}, {"rank": "DST-4", "adp": "--", "name": "Buffalo D/ST", "team": "BUF", "bye": "-", "ppg": "-", "pos": "DST", "rookie": false}, {"rank": "DST-5", "adp": "--", "name": "Carolina D/ST", "team": "CAR", "bye": "-", "ppg": "-", "pos": "DST", "rookie": false}, {"rank": "DST-6", "adp": "--", "name": "Chicago D/ST", "team": "CHI", "bye": "-", "ppg": "-", "pos": "DST", "rookie": false}, {"rank": "DST-7", "adp": "--", "name": "Cincinnati D/ST", "team": "CIN", "bye": "-", "ppg": "-", "pos": "DST", "rookie": false}, {"rank": "DST-8", "adp": "--", "name": "Cleveland D/ST", "team": "CLE", "bye": "-", "ppg": "-", "pos": "DST", "rookie": false}, {"rank": "DST-9", "adp": "--", "name": "Dallas D/ST", "team": "DAL", "bye": "-", "ppg": "-", "pos": "DST", "rookie": false}, {"rank": "DST-10", "adp": "--", "name": "Denver D/ST", "team": "DEN", "bye": "-", "ppg": "-", "pos": "DST", "rookie": false}, {"rank": "DST-11", "adp": "--", "name": "Detroit D/ST", "team": "DET", "bye": "-", "ppg": "-", "pos": "DST", "rookie": false}, {"rank": "DST-12", "adp": "--", "name": "Green Bay D/ST", "team": "GB", "bye": "-", "ppg": "-", "pos": "DST", "rookie": false}, {"rank": "DST-13", "adp": "--", "name": "Houston D/ST", "team": "HOU", "bye": "-", "ppg": "-", "pos": "DST", "rookie": false}, {"rank": "DST-14", "adp": "--", "name": "Indianapolis D/ST", "team": "IND", "bye": "-", "ppg": "-", "pos": "DST", "rookie": false}, {"rank": "DST-15", "adp": "--", "name": "Jacksonville D/ST", "team": "JAX", "bye": "-", "ppg": "-", "pos": "DST", "rookie": false}, {"rank": "DST-16", "adp": "--", "name": "Kansas City D/ST", "team": "KC", "bye": "-", "ppg": "-", "pos": "DST", "rookie": false}, {"rank": "DST-17", "adp": "--", "name": "LA Chargers D/ST", "team": "LAC", "bye": "-", "ppg": "-", "pos": "DST", "rookie": false}, {"rank": "DST-18", "adp": "--", "name": "LA Rams D/ST", "team": "LAR", "bye": "-", "ppg": "-", "pos": "DST", "rookie": false}, {"rank": "DST-19", "adp": "--", "name": "Las Vegas D/ST", "team": "LV", "bye": "-", "ppg": "-", "pos": "DST", "rookie": false}, {"rank": "DST-20", "adp": "--", "name": "Miami D/ST", "team": "MIA", "bye": "-", "ppg": "-", "pos": "DST", "rookie": false}, {"rank": "DST-21", "adp": "--", "name": "Minnesota D/ST", "team": "MIN", "bye": "-", "ppg": "-", "pos": "DST", "rookie": false}, {"rank": "DST-22", "adp": "--", "name": "NY Giants D/ST", "team": "NYG", "bye": "-", "ppg": "-", "pos": "DST", "rookie": false}, {"rank": "DST-23", "adp": "--", "name": "NY Jets D/ST", "team": "NYJ", "bye": "-", "ppg": "-", "pos": "DST", "rookie": false}, {"rank": "DST-24", "adp": "--", "name": "New England D/ST", "team": "NE", "bye": "-", "ppg": "-", "pos": "DST", "rookie": false}, {"rank": "DST-25", "adp": "--", "name": "New Orleans D/ST", "team": "NO", "bye": "-", "ppg": "-", "pos": "DST", "rookie": false}, {"rank": "DST-26", "adp": "--", "name": "Philadelphia D/ST", "team": "PHI", "bye": "-", "ppg": "-", "pos": "DST", "rookie": false}, {"rank": "DST-27", "adp": "--", "name": "Pittsburgh D/ST", "team": "PIT", "bye": "-", "ppg": "-", "pos": "DST", "rookie": false}, {"rank": "DST-28", "adp": "--", "name": "San Francisco D/ST", "team": "SF", "bye": "-", "ppg": "-", "pos": "DST", "rookie": false}, {"rank": "DST-29", "adp": "--", "name": "Seattle D/ST", "team": "SEA", "bye": "-", "ppg": "-", "pos": "DST", "rookie": false}, {"rank": "DST-30", "adp": "--", "name": "Tampa Bay D/ST", "team": "TB", "bye": "-", "ppg": "-", "pos": "DST", "rookie": false}, {"rank": "DST-31", "adp": "--", "name": "Tennessee D/ST", "team": "TEN", "bye": "-", "ppg": "-", "pos": "DST", "rookie": false}, {"rank": "DST-32", "adp": "--", "name": "Washington D/ST", "team": "WAS", "bye": "-", "ppg": "-", "pos": "DST", "rookie": false}];
+
+function defaultRosterSlots(){
+  return [
+    { slot:'QB', label:'QB', pos:['QB'] },
+    { slot:'RB1', label:'RB', pos:['RB'] },
+    { slot:'RB2', label:'RB', pos:['RB'] },
+    { slot:'WR1', label:'WR', pos:['WR'] },
+    { slot:'WR2', label:'WR', pos:['WR'] },
+    { slot:'TE', label:'TE', pos:['TE'] },
+    { slot:'FLEX', label:'FLEX (RB/WR)', pos:['RB','WR'] },
+    { slot:'K', label:'K', pos:['K'] },
+    { slot:'DST', label:'DEF', pos:['DST'] }
+  ];
+}
+
+const LEAGUES = {
+  balla: {
+    key:'balla', name:'Ballsvenkan', n:12, defaultRounds:15,
+    desc:'Ren snake genom hela draften: runda 1 går 1→12, runda 2 går 12→1, runda 3 går 1→12, osv.',
+    order:(round, idx, n) => (round % 2 === 1) ? idx+1 : n-idx
+  },
+  douche: {
+    key:'douche', name:'Douchebag', n:8, defaultRounds:15,
+    desc:'Runda 1 och 2 går båda 1→8 (ingen snake än). Från runda 3 är det vanlig snake: 8→1, 1→8, 8→1 osv.',
+    order:(round, idx, n) => {
+      if (round <= 2) return idx+1;
+      return (round % 2 === 1) ? n-idx : idx+1;
+    }
+  }
+};
+const POS_OPTIONS = ['QB','RB','WR','TE','K','DST'];
+const RANK_PAGES = { QB:'Quarterbacks', RB:'Running backs', WR:'Wide receivers', TE:'Tight ends', K:'Kickers', DST:'Defense/Special Teams', ROOKIE:'Rookies' };
+
+const state = {};        // state[key] = {slots, rounds, picks:{"r-p":"Name (POS-TM)"}}
+const rankSearch = {};   // rankSearch[cat] = 'text'
+let currentPage = 'balla';
+let saveTimer = null;
+let suggestBoxMouseDown = false;
+
+function storageKey(key){ return 'draft:' + key; }
+function formatPlayerLabel(p){ return `${p.name} (${p.pos}-${p.team})`; }
+function escapeHtml(str){
+  return String(str).replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+}
+function escapeAttr(str){ return escapeHtml(str); }
+
+async function loadLeague(key){
+  const cfg = LEAGUES[key];
+  let data = null;
+  try{
+    const raw = localStorage.getItem(storageKey(key));
+    if(raw) data = JSON.parse(raw);
+  }catch(e){ /* nothing saved yet, use defaults */ }
+  if(!data){
+    data = { slots: Array.from({length:cfg.n}, (_,i)=> 'Lag ' + (i+1)), rounds: cfg.defaultRounds, picks: {}, pickHistory: [], rosterSlots: defaultRosterSlots() };
+  }
+  if(!data.pickHistory) data.pickHistory = [];
+  if(!data.rosterSlots) data.rosterSlots = defaultRosterSlots();
+  state[key] = data;
+}
+
+function queueSave(key){
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(async ()=>{
+    const payload = JSON.stringify(state[key]);
+    try{
+      localStorage.setItem(storageKey(key), payload);
+      const ind = document.getElementById('save-'+key);
+      if(ind){ ind.textContent = '✓ Sparat'; ind.classList.add('show'); setTimeout(()=>ind.classList.remove('show'), 900); }
+    }catch(e){
+      console.error('Save failed', e);
+      const ind = document.getElementById('save-'+key);
+      if(ind){ ind.textContent = '⚠ Sparades inte just nu — dina val finns kvar i sessionen'; ind.classList.add('show'); }
+    }
+  }, 300);
+}
+
+function switchPage(page){
+  currentPage = page;
+  document.querySelectorAll('.nav-btn').forEach(b=> b.classList.toggle('active', b.dataset.page === page));
+  document.querySelectorAll('.page').forEach(s=> s.classList.toggle('active', s.dataset.page === page));
+  if(RANK_PAGES[page]) renderRankingPage(page);
+  if(page === 'MYTEAM') renderMyTeamPage();
+  if(page === 'ALLTEAMS') renderAllTeamsPage();
+  if(page === 'RULES') renderRulesPage();
+}
+
+function getRoundDirection(cfg, round){ return cfg.order(round, 0, cfg.n) === 1 ? 'asc' : 'desc'; }
+
+function orderedPickKeys(key){
+  const cfg = LEAGUES[key];
+  const data = state[key];
+  const keys = [];
+  for(let r=1; r<=data.rounds; r++){ for(let i=0; i<cfg.n; i++){ keys.push(r + '-' + i); } }
+  return keys;
+}
+
+function findCurrentPick(key){
+  const keys = orderedPickKeys(key);
+  for(const k of keys){ if(!state[key].picks[k]) return k; }
+  return null;
+}
+
+function renderLeaguePage(key){
+  const cfg = LEAGUES[key];
+  const data = state[key];
+  const el = document.getElementById('page-'+key);
+  const currentKey = findCurrentPick(key);
+
+  let slotsHtml = data.slots.map((name, i) => `
+    <div class="slot-field">
+      <label>Position ${i+1}</label>
+      <input type="text" value="${escapeAttr(name)}" data-action="update-slot" data-league="${key}" data-idx="${i}" />
+    </div>
+  `).join('');
+
+  let clockHtml = '';
+  if(currentKey){
+    const [r, iStr] = currentKey.split('-');
+    const round = parseInt(r,10), i = parseInt(iStr,10);
+    const slotIdx = cfg.order(round, i, cfg.n) - 1;
+    const teamName = data.slots[slotIdx] || ('Lag ' + (slotIdx+1));
+    const overallPick = (round-1)*cfg.n + i + 1;
+    clockHtml = `
+      <div class="clock-banner">
+        <div class="clock-left">
+          <div class="clock-pulse"></div>
+          <div>
+            <div class="clock-label">På tur — Runda ${round}, pick ${i+1}</div>
+            <div class="clock-team">${escapeHtml(teamName)}</div>
+          </div>
+        </div>
+        <div class="clock-meta">Overall pick #${overallPick}</div>
+      </div>
+    `;
+  } else {
+    clockHtml = `<div class="clock-banner"><div class="clock-left"><div class="clock-done">✓ Draften är klar</div></div></div>`;
+  }
+
+  let theadHtml = `<th class="corner">Runda</th>` + Array.from({length:cfg.n}, (_,i)=> `<th>Pick ${i+1}</th>`).join('');
+
+  let rowsHtml = '';
+  for(let r=1; r<=data.rounds; r++){
+    const dirArrow = getRoundDirection(cfg, r) === 'asc' ? '1 → ' + cfg.n : cfg.n + ' → 1';
+    let cells = '';
+    for(let i=0; i<cfg.n; i++){
+      const slotIdx = cfg.order(r, i, cfg.n) - 1;
+      const teamName = data.slots[slotIdx] || ('Lag ' + (slotIdx+1));
+      const overallPick = (r-1)*cfg.n + i + 1;
+      const pickKey = r + '-' + i;
+      const val = data.picks[pickKey] || '';
+      const isCurrent = pickKey === currentKey;
+      cells += `
+        <td class="pick-cell${isCurrent ? ' current' : ''}" data-league="${key}" data-pick-key="${pickKey}">
+          <div class="cell-inner">
+            <div class="cell-top">
+              <span class="team-name" title="${escapeAttr(teamName)}">${escapeHtml(teamName)}</span>
+              <span class="pick-num">#${overallPick}</span>
+            </div>
+            <input class="player-search" type="text" autocomplete="off" placeholder="Sök spelare…" value="${escapeAttr(val)}"
+              data-action="player-search" data-league="${key}" data-pick-key="${pickKey}" />
+          </div>
+        </td>
+      `;
+    }
+    rowsHtml += `
+      <tr>
+        <th class="round-head"><span class="round-num">R${r}</span><span class="round-dir">${dirArrow}</span></th>
+        ${cells}
+      </tr>
+    `;
+  }
+
+  el.innerHTML = `
+    <div class="card">
+      <h2>${cfg.name} — lagnamn per position</h2>
+      <p class="desc">${cfg.desc}</p>
+      <div class="slots-grid">${slotsHtml}</div>
+      <div class="controls-row">
+        <div class="rounds-control">
+          Antal rundor:
+          <input type="number" min="1" max="30" value="${data.rounds}" data-action="update-rounds" data-league="${key}" />
+        </div>
+        <div class="rounds-control">
+          Jag är:
+          <select data-action="update-myteam" data-league="${key}">
+            <option value="">– välj lag –</option>
+            ${data.slots.map((name,i)=> `<option value="${i}" ${data.myTeamIdx===i?'selected':''}>${escapeHtml(name)}</option>`).join('')}
+          </select>
+        </div>
+        <div style="display:flex; align-items:center; gap:10px;">
+          <span class="save-indicator" id="save-${key}">✓ Sparat</span>
+          <button class="btn" data-action="undo-pick" data-league="${key}" ${(!data.pickHistory || !data.pickHistory.length) ? 'disabled' : ''}>↶ Ångra senaste val</button>
+          <button class="btn" data-action="reset-league" data-league="${key}">Rensa liga</button>
+        </div>
+      </div>
+    </div>
+
+    ${clockHtml}
+
+    <div class="card" style="padding:0; overflow:hidden;">
+      <div class="table-scroll">
+        <table class="board">
+          <thead><tr>${theadHtml}</tr></thead>
+          <tbody>${rowsHtml}</tbody>
+        </table>
+      </div>
+    </div>
+  `;
+}
+
+function renderRankingPage(cat){
+  const el = document.getElementById('page-'+cat);
+  if(!el) return;
+  const search = rankSearch[cat] || '';
+  const label = RANK_PAGES[cat];
+
+  let players = cat === 'ROOKIE' ? PLAYERS.filter(p=>p.rookie) : PLAYERS.filter(p=>p.pos===cat);
+  if(search){
+    const q = search.toLowerCase();
+    players = players.filter(p => p.name.toLowerCase().includes(q) || p.team.toLowerCase().includes(q));
+  }
+
+  const takenBalla = new Set(Object.values(state.balla.picks).filter(Boolean));
+  const takenDouche = new Set(Object.values(state.douche.picks).filter(Boolean));
+
+  const itemsHtml = players.map(p => {
+    const label = formatPlayerLabel(p);
+    const inBalla = takenBalla.has(label);
+    const inDouche = takenDouche.has(label);
+    const isTaken = inBalla || inDouche;
+    return `
+      <div class="rank-item ${posClass(p.pos)}${isTaken?' taken':''}">
+        <div class="ri-left">
+          <div class="ri-name">${escapeHtml(p.rank)} ${escapeHtml(p.name)} <span style="color:var(--silver-dim); font-weight:400;">(${p.team})</span>${p.rookie?'<span class="rookie-badge">R</span>':''}</div>
+          <div class="ri-sub">${p.team} · Bye ${p.bye} · ADP ${p.adp} · ${p.ppg} p/game</div>
+        </div>
+        <div class="ri-right">
+          <span class="taken-pill${inBalla?' filled':''}">${LEAGUES.balla.name}</span>
+          <span class="taken-pill${inDouche?' filled':''}">${LEAGUES.douche.name}</span>
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  el.innerHTML = `
+    <div class="card">
+      <h2>${label}</h2>
+      <p class="desc">Fullständig 4for4-ranking. Pillerna visar om spelaren redan är draftad i respektive liga.</p>
+      <input class="rank-search" type="text" placeholder="Sök spelare eller lag…" value="${escapeAttr(search)}" data-action="rank-search" data-cat="${cat}" />
+      <div class="rank-count">${players.length} spelare</div>
+      <div class="rank-table">${itemsHtml || '<div class="suggest-empty">Inga spelare matchar.</div>'}</div>
+    </div>
+  `;
+}
+
+function parsePlayerLabel(label){
+  if(!label) return null;
+  const m = label.match(/^(.*) \(([A-Z]+)-([A-Z]+)\)$/);
+  if(!m) return { name: label, pos: '', team: '' };
+  return { name: m[1], pos: m[2], team: m[3] };
+}
+
+function getRosterForSlot(key, slotIdx){
+  const cfg = LEAGUES[key];
+  const data = state[key];
+  const picks = [];
+  for(let r=1; r<=data.rounds; r++){
+    for(let i=0; i<cfg.n; i++){
+      if(cfg.order(r, i, cfg.n) - 1 === slotIdx){
+        const pickKey = r + '-' + i;
+        const overallPick = (r-1)*cfg.n + i + 1;
+        const label = data.picks[pickKey] || '';
+        picks.push({ round: r, overallPick, label });
+        break;
+      }
+    }
+  }
+  return picks;
+}
+
+function buildStartingLineup(cfg, roster){
+  const template = cfg.rosterSlots.map(t => ({ ...t, player: null }));
+  const picked = roster.filter(p => p.label).map(p => ({ ...p, parsed: parsePlayerLabel(p.label) }));
+  const bench = [];
+  for(const pick of picked){
+    const pos = pick.parsed.pos;
+    let slot = template.find(s => !s.player && !Array.isArray(s.pos) && s.pos === pos);
+    if(!slot){
+      slot = template.find(s => !s.player && Array.isArray(s.pos) && s.pos.includes(pos));
+    }
+    if(slot){ slot.player = pick; }
+    else { bench.push(pick); }
+  }
+  return { template, bench };
+}
+
+function buildStartingLineup(rosterSlots, roster){
+  const template = rosterSlots.map(t => ({ ...t, player: null }));
+  const picked = roster.filter(p => p.label).map(p => ({ ...p, parsed: parsePlayerLabel(p.label) }));
+  const bench = [];
+  for(const pick of picked){
+    const pos = pick.parsed.pos;
+    let slot = template.find(s => !s.player && s.pos.length === 1 && s.pos.includes(pos));
+    if(!slot){
+      slot = template.find(s => !s.player && s.pos.includes(pos));
+    }
+    if(slot){ slot.player = pick; }
+    else { bench.push(pick); }
+  }
+  return { template, bench };
+}
+
+function posClass(pos){
+  return 'pos-' + (pos || '').toLowerCase();
+}
+
+function renderMyTeamPage(){
+  const el = document.getElementById('page-MYTEAM');
+  if(!el) return;
+
+  const sections = Object.keys(LEAGUES).map(key => {
+    const cfg = LEAGUES[key];
+    const data = state[key];
+    if(data.myTeamIdx === null || data.myTeamIdx === undefined){
+      return `
+        <div class="card myteam-card">
+          <h2>${cfg.name}</h2>
+          <p class="desc">Du har inte valt vilket lag du är ännu. Gå till ${cfg.name}-fliken och välj "Jag är:" högst upp.</p>
+        </div>
+      `;
+    }
+    const teamName = data.slots[data.myTeamIdx] || ('Lag ' + (data.myTeamIdx+1));
+    const roster = getRosterForSlot(key, data.myTeamIdx);
+
+    let lineupHtml = '';
+    if(data.rosterSlots && data.rosterSlots.length){
+      const { template, bench } = buildStartingLineup(data.rosterSlots, roster);
+      const slotsHtml = template.map(s => {
+        if(s.player){
+          const p = s.player.parsed;
+          return `
+            <div class="lineup-slot filled ${posClass(p.pos)}">
+              <div class="lineup-slot-label">${escapeHtml(s.label)}</div>
+              <div class="lineup-slot-player">${escapeHtml(p.name)} <span class="pos-badge ${posClass(p.pos)}">${escapeHtml(p.pos)}</span> <span class="lineup-slot-team">${escapeHtml(p.team)}</span></div>
+            </div>
+          `;
+        }
+        return `
+          <div class="lineup-slot empty">
+            <div class="lineup-slot-label">${escapeHtml(s.label)}</div>
+            <div class="lineup-slot-player empty-slot">— tom —</div>
+          </div>
+        `;
+      }).join('');
+      const benchHtml = bench.length ? bench.map(p => `
+        <div class="lineup-bench-item"><span class="pos-badge ${posClass(p.parsed.pos)}">${escapeHtml(p.parsed.pos)}</span> ${escapeHtml(p.parsed.name)} <span class="lineup-slot-team">${escapeHtml(p.parsed.team)}</span></div>
+      `).join('') : '<div class="lineup-bench-item empty-slot">— inga bänkspelare än —</div>';
+
+
+      lineupHtml = `
+        <div class="lineup-preview">
+          <div class="lineup-preview-title">Startlag (preview)</div>
+          <div class="lineup-slots-grid">${slotsHtml}</div>
+          <div class="lineup-bench-title">Bänk (${bench.length})</div>
+          <div class="lineup-bench-grid">${benchHtml}</div>
+        </div>
+      `;
+    }
+
+    const rowsHtml = roster.map(p => {
+      const parsed = parsePlayerLabel(p.label);
+      const filled = !!p.label;
+      return `
+        <div class="myteam-row${filled?'':' empty'}">
+          <div class="myteam-round">R${p.round} <span class="myteam-overall">#${p.overallPick}</span></div>
+          <div class="myteam-player">
+            ${filled ? `<span class="myteam-name">${escapeHtml(parsed.name)}</span> <span class="myteam-pos pos-badge ${posClass(parsed.pos)}">${escapeHtml(parsed.pos)}</span> <span class="myteam-team">${escapeHtml(parsed.team)}</span>` : '<span class="myteam-name empty-slot">— inte draftad än —</span>'}
+          </div>
+        </div>
+      `;
+    }).join('');
+    return `
+      <div class="card myteam-card">
+        <div class="myteam-head">
+          <div class="eyebrow">${cfg.name}</div>
+          <h2 class="myteam-title">${escapeHtml(teamName)}</h2>
+        </div>
+        ${lineupHtml}
+        <div class="lineup-bench-title" style="margin-top:20px;">Alla picks (draftordning)</div>
+        <div class="myteam-list">${rowsHtml}</div>
+      </div>
+    `;
+  }).join('');
+
+  el.innerHTML = `<div class="myteam-wrap">${sections}</div>`;
+}
+
+function renderAllTeamsPage(){
+  const el = document.getElementById('page-ALLTEAMS');
+  if(!el) return;
+
+  const sections = Object.keys(LEAGUES).map(key => {
+    const cfg = LEAGUES[key];
+    const data = state[key];
+    const teamsHtml = data.slots.map((teamName, slotIdx) => {
+      const roster = getRosterForSlot(key, slotIdx);
+      const isMe = data.myTeamIdx === slotIdx;
+      const picksHtml = roster.filter(p => p.label).map(p => {
+        const parsed = parsePlayerLabel(p.label);
+        return `<div class="allteams-pick"><span class="allteams-round">R${p.round}</span> ${escapeHtml(parsed.name)} <span class="allteams-pos pos-badge ${posClass(parsed.pos)}">${escapeHtml(parsed.pos)}</span></div>`;
+      }).join('') || '<div class="allteams-pick empty">Inga val än</div>';
+      return `
+        <div class="allteams-team${isMe?' is-me':''}">
+          <div class="allteams-team-name">${escapeHtml(teamName)}${isMe ? ' <span class="me-badge">DU</span>' : ''}</div>
+          <div class="allteams-picks">${picksHtml}</div>
+        </div>
+      `;
+    }).join('');
+    return `
+      <div class="card">
+        <h2>${cfg.name}</h2>
+        <div class="allteams-grid">${teamsHtml}</div>
+      </div>
+    `;
+  }).join('');
+
+  el.innerHTML = sections;
+}
+
+function renderRulesPage(){
+  const el = document.getElementById('page-RULES');
+  if(!el) return;
+
+  const sections = Object.keys(LEAGUES).map(key => {
+    const cfg = LEAGUES[key];
+    const data = state[key];
+    const slots = data.rosterSlots || [];
+    const startersCount = slots.length;
+    const bench = Math.max(0, data.rounds - startersCount);
+
+    const rowsHtml = slots.map((s, idx) => {
+      const posChecks = POS_OPTIONS.map(pos => `
+        <label class="pos-check ${posClass(pos)}${s.pos.includes(pos)?' checked':''}">
+          <input type="checkbox" data-action="toggle-slot-pos" data-league="${key}" data-idx="${idx}" data-pos="${pos}" ${s.pos.includes(pos)?'checked':''}>
+          ${pos}
+        </label>
+      `).join('');
+      return `
+        <div class="rule-row">
+          <input type="text" class="rule-label-input" value="${escapeAttr(s.label)}" data-action="update-slot-label" data-league="${key}" data-idx="${idx}" />
+          <div class="rule-pos-checks">${posChecks}</div>
+          <button class="btn rule-remove-btn" data-action="remove-slot" data-league="${key}" data-idx="${idx}">✕</button>
+        </div>
+      `;
+    }).join('');
+
+    return `
+      <div class="card">
+        <h2>${cfg.name}</h2>
+        <p class="desc">Startplatser fylls i ordningen de listas nedan (specifika positioner före FLEX-slots). Resten av rundorna hamnar automatiskt på bänken.</p>
+        <div class="rules-list">${rowsHtml}</div>
+        <div class="rules-actions">
+          <button class="btn" data-action="add-slot" data-league="${key}">+ Lägg till slot</button>
+          <button class="btn" data-action="reset-slots" data-league="${key}">Återställ till standard</button>
+          <span class="rules-bench-info">Startplatser: ${startersCount} · Bänk: ${bench} (av ${data.rounds} rundor totalt)</span>
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  el.innerHTML = sections;
+}
+
+function addRosterSlot(key){
+  if(!state[key].rosterSlots) state[key].rosterSlots = defaultRosterSlots();
+  state[key].rosterSlots.push({ slot:'SLOT'+Date.now(), label:'Ny slot', pos:['RB','WR'] });
+  renderRulesPage();
+  queueSave(key);
+}
+
+function removeRosterSlot(key, idx){
+  state[key].rosterSlots.splice(idx, 1);
+  renderRulesPage();
+  queueSave(key);
+}
+
+function updateSlotLabel(key, idx, value){
+  state[key].rosterSlots[idx].label = value;
+  queueSave(key);
+}
+
+function toggleSlotPos(key, idx, pos, checked){
+  const slot = state[key].rosterSlots[idx];
+  if(checked){
+    if(!slot.pos.includes(pos)) slot.pos.push(pos);
+  } else {
+    slot.pos = slot.pos.filter(p => p !== pos);
+  }
+  renderRulesPage();
+  queueSave(key);
+}
+
+function resetRosterSlotsToDefault(key){
+  if(!confirm('Återställ rosterkraven för ' + LEAGUES[key].name + ' till standard (1 QB/2 RB/2 WR/1 TE/FLEX/K/DEF)?')) return;
+  state[key].rosterSlots = defaultRosterSlots();
+  renderRulesPage();
+  queueSave(key);
+}
+
+
+function pickPlayer(key, pickKey, playerLabel){
+  const previousValue = state[key].picks[pickKey] || null;
+  if(!state[key].pickHistory) state[key].pickHistory = [];
+  state[key].pickHistory.push({ pickKey, previousValue });
+  state[key].picks[pickKey] = playerLabel;
+  renderLeaguePage(key);
+  queueSave(key);
+}
+
+function undoPick(key){
+  const history = state[key].pickHistory;
+  if(!history || !history.length) return;
+  const last = history.pop();
+  if(last.previousValue){
+    state[key].picks[last.pickKey] = last.previousValue;
+  } else {
+    delete state[key].picks[last.pickKey];
+  }
+  renderLeaguePage(key);
+  queueSave(key);
+}
+
+function updateSlot(key, idx, value){
+  state[key].slots[idx] = value || ('Lag ' + (idx+1));
+  renderLeaguePage(key);
+  queueSave(key);
+}
+
+function updateRounds(key, value){
+  let n = parseInt(value, 10);
+  if(isNaN(n) || n < 1) n = 1;
+  if(n > 30) n = 30;
+  state[key].rounds = n;
+  renderLeaguePage(key);
+  queueSave(key);
+}
+
+function updateMyTeam(key, value){
+  state[key].myTeamIdx = (value === '' || value === null || value === undefined) ? null : parseInt(value, 10);
+  renderLeaguePage(key);
+  queueSave(key);
+}
+
+function resetLeague(key){
+  if(!confirm('Rensa alla spelarval och lagnamn för ' + LEAGUES[key].name + '? (Regler/rosterkrav påverkas inte)')) return;
+  const cfg = LEAGUES[key];
+  const keepRosterSlots = state[key] && state[key].rosterSlots ? state[key].rosterSlots : defaultRosterSlots();
+  state[key] = { slots: Array.from({length:cfg.n}, (_,i)=> 'Lag ' + (i+1)), rounds: cfg.defaultRounds, picks: {}, pickHistory: [], rosterSlots: keepRosterSlots };
+  renderLeaguePage(key);
+  queueSave(key);
+}
+
+// ---- Searchable dropdown for pick cells ----
+
+function positionSuggestBox(input){
+  const box = document.getElementById('global-suggest');
+  const rect = input.getBoundingClientRect();
+  box.style.left = (rect.left + window.scrollX) + 'px';
+  box.style.top = (rect.bottom + window.scrollY + 4) + 'px';
+  box.style.width = Math.max(rect.width, 230) + 'px';
+}
+
+function showSuggestions(input){
+  const key = input.dataset.league;
+  const pickKey = input.dataset.pickKey;
+  const box = document.getElementById('global-suggest');
+  const query = input.value.trim().toLowerCase();
+  const taken = new Set(Object.values(state[key].picks).filter(Boolean));
+
+  let matches = PLAYERS.filter(p => !taken.has(formatPlayerLabel(p)));
+  if(query) matches = matches.filter(p => p.name.toLowerCase().includes(query) || p.team.toLowerCase().includes(query));
+  matches = matches.slice(0, 8);
+
+  box.innerHTML = matches.length ? matches.map(p => `
+    <div class="suggest-row ${posClass(p.pos)}" data-league="${key}" data-pick-key="${pickKey}" data-label="${escapeAttr(formatPlayerLabel(p))}">
+      <span><span class="pos-badge ${posClass(p.pos)}">${escapeHtml(p.pos)}</span> ${escapeHtml(p.name)}${p.rookie?' <span class="rookie-badge">R</span>':''}</span>
+      <span class="suggest-meta">${p.rank} · ${p.team} · ADP ${p.adp}</span>
+    </div>
+  `).join('') : `<div class="suggest-empty">Inga träffar</div>`;
+
+  positionSuggestBox(input);
+  box.style.display = 'block';
+}
+
+function hideSuggestions(){
+  document.getElementById('global-suggest').style.display = 'none';
+}
+
+// ---- Event delegation ----
+
+document.addEventListener('click', (e) => {
+  const navBtn = e.target.closest('[data-action="switch-page"]');
+  if(navBtn){ switchPage(navBtn.dataset.page); return; }
+
+  const resetBtn = e.target.closest('[data-action="reset-league"]');
+  if(resetBtn){ resetLeague(resetBtn.dataset.league); return; }
+
+  const undoBtn = e.target.closest('[data-action="undo-pick"]');
+  if(undoBtn){ undoPick(undoBtn.dataset.league); return; }
+
+  const addSlotBtn = e.target.closest('[data-action="add-slot"]');
+  if(addSlotBtn){ addRosterSlot(addSlotBtn.dataset.league); return; }
+
+  const removeSlotBtn = e.target.closest('[data-action="remove-slot"]');
+  if(removeSlotBtn){ removeRosterSlot(removeSlotBtn.dataset.league, parseInt(removeSlotBtn.dataset.idx,10)); return; }
+
+  const resetSlotsBtn = e.target.closest('[data-action="reset-slots"]');
+  if(resetSlotsBtn){ resetRosterSlotsToDefault(resetSlotsBtn.dataset.league); return; }
+
+  const exportBtn = e.target.closest('[data-action="export-backup"]');
+  if(exportBtn){ exportBackup(); return; }
+
+  const importBtn = e.target.closest('[data-action="import-backup"]');
+  if(importBtn){
+    showBackupModal('', '(klistra in eller välj fil)');
+    document.getElementById('import-file-input').click();
+    return;
+  }
+
+  const closeModalBtn = e.target.closest('[data-action="close-backup-modal"]');
+  if(closeModalBtn){ hideBackupModal(); return; }
+
+  const copyBtn = e.target.closest('[data-action="copy-backup-text"]');
+  if(copyBtn){ copyBackupText(); return; }
+
+  const importTextBtn = e.target.closest('[data-action="import-backup-text"]');
+  if(importTextBtn){ importBackupFromText(document.getElementById('backup-modal-textarea').value); return; }
+
+  if(e.target.id === 'backup-modal-overlay'){ hideBackupModal(); return; }
+
+  const suggestRow = e.target.closest('.suggest-row');
+  if(suggestRow){
+    pickPlayer(suggestRow.dataset.league, suggestRow.dataset.pickKey, suggestRow.dataset.label);
+    hideSuggestions();
+    return;
+  }
+
+  const cell = e.target.closest('.pick-cell');
+  if(cell && e.target.tagName !== 'INPUT'){
+    document.querySelectorAll(`#page-${cell.dataset.league} td.pick-cell`).forEach(td=> td.classList.remove('current'));
+    cell.classList.add('current');
+  }
+});
+
+document.addEventListener('mousedown', (e) => {
+  if(e.target.closest('#global-suggest')) suggestBoxMouseDown = true;
+});
+document.addEventListener('mouseup', () => { suggestBoxMouseDown = false; });
+
+document.addEventListener('focusin', (e) => {
+  const input = e.target.closest('[data-action="player-search"]');
+  if(input){
+    const cell = input.closest('.pick-cell');
+    if(cell){
+      document.querySelectorAll(`#page-${input.dataset.league} td.pick-cell`).forEach(td=> td.classList.remove('current'));
+      cell.classList.add('current');
+    }
+    showSuggestions(input);
+  }
+});
+
+document.addEventListener('focusout', (e) => {
+  const input = e.target.closest('[data-action="player-search"]');
+  if(input){
+    setTimeout(() => {
+      if(!suggestBoxMouseDown){
+        hideSuggestions();
+        const stored = state[input.dataset.league].picks[input.dataset.pickKey] || '';
+        input.value = stored;
+      }
+    }, 150);
+  }
+});
+
+document.addEventListener('input', (e) => {
+  const searchInput = e.target.closest('[data-action="player-search"]');
+  if(searchInput){ showSuggestions(searchInput); return; }
+
+  const rankInput = e.target.closest('[data-action="rank-search"]');
+  if(rankInput){ rankSearch[rankInput.dataset.cat] = rankInput.value; renderRankingPage(rankInput.dataset.cat); return; }
+});
+
+document.addEventListener('change', (e) => {
+  const slotInput = e.target.closest('[data-action="update-slot"]');
+  if(slotInput){ updateSlot(slotInput.dataset.league, parseInt(slotInput.dataset.idx,10), slotInput.value); return; }
+
+  const roundsInput = e.target.closest('[data-action="update-rounds"]');
+  if(roundsInput){ updateRounds(roundsInput.dataset.league, roundsInput.value); return; }
+
+  const myTeamSelect = e.target.closest('[data-action="update-myteam"]');
+  if(myTeamSelect){ updateMyTeam(myTeamSelect.dataset.league, myTeamSelect.value); return; }
+
+  const slotLabelInput = e.target.closest('[data-action="update-slot-label"]');
+  if(slotLabelInput){ updateSlotLabel(slotLabelInput.dataset.league, parseInt(slotLabelInput.dataset.idx,10), slotLabelInput.value); return; }
+
+  const posCheck = e.target.closest('[data-action="toggle-slot-pos"]');
+  if(posCheck){ toggleSlotPos(posCheck.dataset.league, parseInt(posCheck.dataset.idx,10), posCheck.dataset.pos, posCheck.checked); return; }
+
+  if(e.target.id === 'import-file-input'){ importBackup(e.target.files[0]); e.target.value = ''; return; }
+});
+
+async function exportBackup(){
+  const payload = {
+    exportedAt: new Date().toISOString(),
+    balla: state.balla,
+    douche: state.douche
+  };
+  const jsonStr = JSON.stringify(payload, null, 2);
+  const stamp = new Date().toISOString().slice(0,16).replace(/[:T]/g,'-');
+  const filename = `draftboard-backup-${stamp}.json`;
+  const status = document.getElementById('backup-status');
+
+  let shared = false;
+  try{
+    if(navigator.share && navigator.canShare){
+      const file = new File([jsonStr], filename, {type:'application/json'});
+      if(navigator.canShare({files:[file]})){
+        await navigator.share({files:[file], title:'Draftboard backup'});
+        shared = true;
+        if(status){ status.textContent = '✓ Delad'; setTimeout(()=> status.textContent='', 2500); }
+      }
+    }
+  }catch(e){ /* user cancelled share or not supported, fall through */ }
+
+  if(!shared){
+    try{
+      const blob = new Blob([jsonStr], {type:'application/json'});
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      if(status){ status.textContent = '✓ Nedladdning startad'; setTimeout(()=> status.textContent='', 2500); }
+    }catch(e){ /* ignore, modal below is the guaranteed fallback */ }
+  }
+
+  showBackupModal(jsonStr, filename);
+}
+
+function showBackupModal(jsonStr, filename){
+  const overlay = document.getElementById('backup-modal-overlay');
+  const textarea = document.getElementById('backup-modal-textarea');
+  const title = document.getElementById('backup-modal-filename');
+  textarea.value = jsonStr;
+  title.textContent = filename;
+  overlay.classList.add('show');
+}
+
+function hideBackupModal(){
+  document.getElementById('backup-modal-overlay').classList.remove('show');
+}
+
+async function copyBackupText(){
+  const textarea = document.getElementById('backup-modal-textarea');
+  const status = document.getElementById('backup-modal-copy-status');
+  try{
+    await navigator.clipboard.writeText(textarea.value);
+    if(status) status.textContent = '✓ Kopierat';
+  }catch(e){
+    textarea.select();
+    try{
+      document.execCommand('copy');
+      if(status) status.textContent = '✓ Kopierat';
+    }catch(e2){
+      if(status) status.textContent = 'Markera texten manuellt och kopiera (Cmd/Ctrl+C)';
+    }
+  }
+  setTimeout(()=>{ if(status) status.textContent=''; }, 2500);
+}
+
+function applyBackupData(data, status){
+  if(data.balla){ state.balla = data.balla; if(!state.balla.pickHistory) state.balla.pickHistory = []; if(!state.balla.rosterSlots) state.balla.rosterSlots = defaultRosterSlots(); }
+  if(data.douche){ state.douche = data.douche; if(!state.douche.pickHistory) state.douche.pickHistory = []; if(!state.douche.rosterSlots) state.douche.rosterSlots = defaultRosterSlots(); }
+  renderLeaguePage('balla');
+  renderLeaguePage('douche');
+  Object.keys(RANK_PAGES).forEach(renderRankingPage);
+  queueSave('balla');
+  queueSave('douche');
+  hideBackupModal();
+  if(status){ status.textContent = '✓ Backup inläst'; setTimeout(()=> status.textContent='', 2500); }
+}
+
+function importBackup(file){
+  const status = document.getElementById('backup-status');
+  if(!file){ return; }
+  const reader = new FileReader();
+  reader.onload = () => {
+    try{
+      const data = JSON.parse(reader.result);
+      applyBackupData(data, status);
+    }catch(e){
+      console.error('Import failed', e);
+      if(status){ status.textContent = '⚠ Kunde inte läsa filen'; setTimeout(()=> status.textContent='', 3000); }
+    }
+  };
+  reader.readAsText(file);
+}
+
+function importBackupFromText(text){
+  const status = document.getElementById('backup-modal-copy-status');
+  try{
+    const data = JSON.parse(text);
+    applyBackupData(data, status);
+  }catch(e){
+    console.error('Import failed', e);
+    if(status){ status.textContent = '⚠ Texten är inte giltig JSON'; setTimeout(()=> status.textContent='', 3000); }
+  }
+}
+
+async function init(){
+  await loadLeague('balla');
+  await loadLeague('douche');
+  renderLeaguePage('balla');
+  renderLeaguePage('douche');
+  Object.keys(RANK_PAGES).forEach(renderRankingPage);
+}
+init().catch(showBootError);
+
+} catch(err) {
+  showBootError(err);
+}
+</script>
+</body>
+</html>
