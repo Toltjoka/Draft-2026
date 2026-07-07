@@ -169,11 +169,11 @@
     display:block; font-family:'IBM Plex Mono',monospace; font-size:10px;
     color:var(--chalk-dim); margin-bottom:4px; letter-spacing:.05em;
   }
-  .slot-field input{
+  .slot-field input, .slot-field select{
     width:100%; background:var(--panel-2); border:1px solid var(--line); border-radius:8px;
     padding:8px 9px; color:var(--chalk); font-family:'Inter',sans-serif; font-weight:600; font-size:13px;
   }
-  .slot-field input:focus{outline:2px solid var(--silver); outline-offset:1px;}
+  .slot-field input:focus, .slot-field select:focus{outline:2px solid var(--silver); outline-offset:1px;}
 
   .controls-row{
     display:flex; align-items:center; justify-content:space-between; gap:14px;
@@ -485,7 +485,22 @@ const LEAGUES = {
   balla: {
     key:'balla', name:'Ballsvenkan', n:12, defaultRounds:15,
     desc:'Ren snake genom hela draften: runda 1 går 1→12, runda 2 går 12→1, runda 3 går 1→12, osv.',
-    order:(round, idx, n) => (round % 2 === 1) ? idx+1 : n-idx
+    order:(round, idx, n) => (round % 2 === 1) ? idx+1 : n-idx,
+    defaultSlotNames: [
+      "TD's (Taylor's Version) (@sopra)",
+      "Naber ending story (@Toltjoka)",
+      "Staffordvarenstalledräng (@FronOvan)",
+      "💩 king! (@Sanken)",
+      "Name is Bond, James Cook (@GuStavius)",
+      "Team gustavthiel (@gustavthiel)",
+      "Amon top of the world (@Linkan93)",
+      "Team Ridethelightninbolts (@Ridethelightninbolts)",
+      "MullEmekaLadd (@Bosse1)",
+      "Är det här vi Ska(tte)bo? (@jacobedh)",
+      "Mina Gubbar FK (@eliasnorling)",
+      "I Think I Pulled McCaff (@Samuelhaggbring)"
+    ],
+    defaultMyTeamIdx: 1
   },
   douche: {
     key:'douche', name:'Douchebag', n:8, defaultRounds:15,
@@ -494,7 +509,8 @@ const LEAGUES = {
       if (round <= 2) return idx+1;
       return (round % 2 === 1) ? n-idx : idx+1;
     },
-    defaultSlotNames: ['Toltjoka - Tush Push Cum Squad','TBG Tweaky Tweakers','Skurebo Molesters','Vissefjärda Vultures','Owls Football','Oggydoge Drunken Dinos','The Roster Roosters','Monsters of Majorna']
+    defaultSlotNames: ['Toltjoka - Tush Push Cum Squad','TBG Tweaky Tweakers','Skurebo Molesters','Vissefjärda Vultures','Owls Football','Oggydoge Drunken Dinos','The Roster Roosters','Monsters of Majorna'],
+    defaultMyTeamIdx: 0
   }
 };
 const POS_OPTIONS = ['QB','RB','WR','TE','K','DST'];
@@ -628,12 +644,20 @@ async function loadLeague(key){
   if(!data.rosterSlots) data.rosterSlots = defaultRosterSlots();
   if(!data.keepers) data.keepers = Array.from({length:cfg.n}, ()=> ['','']);
   // Migrering: om ett lagnamn fortfarande är ett oredigerat "Lag N" (från en äldre version av verktyget),
-  // uppdatera tyst till det riktiga lagnamnet. Namn du redan skrivit in själv rörs aldrig.
+  // eller ett tidigare autonamn utan @-handle, uppdatera tyst till det senaste riktiga namnet.
+  // Namn du redan skrivit in helt själv (som inte matchar mönstret) rörs aldrig.
   if(cfg.defaultSlotNames){
     data.slots = data.slots.map((name, i) => {
-      const isGenericDefault = /^Lag \d+$/.test((name||'').trim());
-      return (isGenericDefault && cfg.defaultSlotNames[i]) ? cfg.defaultSlotNames[i] : name;
+      const trimmed = (name||'').trim();
+      const def = cfg.defaultSlotNames[i];
+      if(!def) return name;
+      const isGenericDefault = /^Lag \d+$/.test(trimmed);
+      const isUnhandledMatch = def.includes('(@') && !trimmed.includes('(@') && trimmed.length > 0 && def.startsWith(trimmed);
+      return (isGenericDefault || isUnhandledMatch) ? def : name;
     });
+  }
+  if((data.myTeamIdx === null || data.myTeamIdx === undefined) && cfg.defaultMyTeamIdx !== undefined){
+    data.myTeamIdx = cfg.defaultMyTeamIdx;
   }
   state[key] = data;
 }
@@ -687,12 +711,21 @@ function renderLeaguePage(key){
   const el = document.getElementById('page-'+key);
   const currentKey = findCurrentPick(key);
 
-  let slotsHtml = data.slots.map((name, i) => `
+  const teamPool = (cfg.defaultSlotNames && cfg.defaultSlotNames.length ? cfg.defaultSlotNames.slice() : data.slots.slice());
+  let slotsHtml = data.slots.map((name, i) => {
+    const options = teamPool.slice();
+    if(name && !options.includes(name)) options.push(name);
+    const optionsHtml = options.map(n => `<option value="${escapeAttr(n)}" ${n===name?'selected':''}>${escapeHtml(n)}</option>`).join('');
+    return `
     <div class="slot-field">
       <label>Position ${i+1}</label>
-      <input type="text" value="${escapeAttr(name)}" data-action="update-slot" data-league="${key}" data-idx="${i}" />
+      <select data-action="update-slot" data-league="${key}" data-idx="${i}">
+        ${optionsHtml}
+        <option value="__custom__">✏️ Annat namn…</option>
+      </select>
     </div>
-  `).join('');
+  `;
+  }).join('');
 
   let clockHtml = '';
   if(currentKey){
@@ -1317,7 +1350,19 @@ document.addEventListener('input', (e) => {
 
 document.addEventListener('change', (e) => {
   const slotInput = e.target.closest('[data-action="update-slot"]');
-  if(slotInput){ updateSlot(slotInput.dataset.league, parseInt(slotInput.dataset.idx,10), slotInput.value); return; }
+  if(slotInput){
+    if(slotInput.value === '__custom__'){
+      const custom = prompt('Skriv lagnamnet:', '');
+      if(custom !== null && custom.trim()){
+        updateSlot(slotInput.dataset.league, parseInt(slotInput.dataset.idx,10), custom.trim());
+      } else {
+        renderLeaguePage(slotInput.dataset.league);
+      }
+      return;
+    }
+    updateSlot(slotInput.dataset.league, parseInt(slotInput.dataset.idx,10), slotInput.value);
+    return;
+  }
 
   const roundsInput = e.target.closest('[data-action="update-rounds"]');
   if(roundsInput){ updateRounds(roundsInput.dataset.league, roundsInput.value); return; }
