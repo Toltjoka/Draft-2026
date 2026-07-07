@@ -362,7 +362,12 @@
   .legacy-grid{display:grid; grid-template-columns:repeat(auto-fill, minmax(240px, 1fr)); gap:14px; margin-top:14px;}
   .legacy-card{padding:16px;}
   .legacy-team-name{font-family:'Bebas Neue',sans-serif; font-size:24px; letter-spacing:.02em; color:var(--chalk); margin-bottom:6px;}
-  .legacy-hint{font-size:11.5px; color:var(--chalk-dim); line-height:1.4; margin:0 0 12px;}
+  .legacy-hint{font-size:11.5px; color:var(--chalk-dim); line-height:1.4; margin:8px 0 12px;}
+  .legacy-manager{font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--chalk-dim); margin-bottom:10px;}
+  .legacy-roster-list{display:flex; flex-direction:column; gap:3px; margin-bottom:6px; max-height:260px; overflow-y:auto; padding-right:4px;}
+  .legacy-roster-row{font-size:12px; color:var(--chalk); display:flex; align-items:center; gap:6px;}
+  .legacy-roster-row.empty{font-style:italic; color:var(--chalk-dim);}
+  .legacy-roster-team{font-family:'IBM Plex Mono',monospace; font-size:10.5px; color:var(--chalk-dim); margin-left:auto;}
   .keeper-fields{display:flex; flex-direction:column; gap:10px;}
   .keeper-field-label{font-family:'IBM Plex Mono',monospace; font-size:10.5px; letter-spacing:.04em; text-transform:uppercase; color:var(--chalk-dim); display:flex; align-items:center; gap:6px; margin-bottom:4px;}
   .keeper-input{
@@ -498,10 +503,73 @@ const LEAGUES = {
       if (round <= 2) return idx+1;
       return (round % 2 === 1) ? n-idx : idx+1;
     },
-    defaultSlotNames: ['Toltjoka','Lag 2','Lag 3','Lag 4','Lag 5','Lag 6','Lag 7','Lag 8']
+    defaultSlotNames: ['Toltjoka - Tush Push Cum Squad','TBG Tweaky Tweakers','Skurebo Molesters','Vissefjärda Vultures','Owls Football','Oggydoge Drunken Dinos','The Roster Roosters','Monsters of Majorna']
   }
 };
 const POS_OPTIONS = ['QB','RB','WR','TE','K','DST'];
+
+// Förra årets (2025) rosters för Douchebag, ett per draftposition (index 0-7, samma ordning som defaultSlotNames).
+// Lag 8:s roster saknas — bilden för det laget gick inte att läsa av.
+const LEGACY_2025_ROSTERS = [
+  { manager:'Pierre', roster:[
+    {name:'Joe Burrow',pos:'QB',team:'CIN'},{name:'Lamar Jackson',pos:'QB',team:'BAL'},
+    {name:'James Cook',pos:'RB',team:'BUF'},{name:'Bucky Irving',pos:'RB',team:'TB'},{name:'Rico Dowdle',pos:'RB',team:'CAR'},
+    {name:'George Pickens',pos:'WR',team:'DAL'},{name:'Tetairoa McMillan',pos:'WR',team:'CAR'},{name:'Brian Thomas Jr.',pos:'WR',team:'JAX'},
+    {name:'Tee Higgins',pos:'WR',team:'CIN'},{name:'DeVonta Smith',pos:'WR',team:'PHI'},{name:'Michael Wilson',pos:'WR',team:'ARI'},{name:'Malik Nabers',pos:'WR',team:'NYG'},
+    {name:'Jake Ferguson',pos:'TE',team:'DAL'},{name:'Juwan Johnson',pos:'TE',team:'NO'},
+    {name:'Jake Bates',pos:'K',team:'DET'},{name:'Detroit Lions',pos:'DST',team:'DET'}
+  ]},
+  { manager:'Filip', roster:[
+    {name:'Jalen Hurts',pos:'QB',team:'PHI'},
+    {name:'Derrick Henry',pos:'RB',team:'BAL'},{name:'Javonte Williams',pos:'RB',team:'DAL'},{name:'Kareem Hunt',pos:'RB',team:'KC'},{name:'Ashton Jeanty',pos:'RB',team:'LV'},{name:'Jordan Mason',pos:'RB',team:'MIN'},
+    {name:'Terry McLaurin',pos:'WR',team:'WAS'},{name:'Ja\u2019Marr Chase',pos:'WR',team:'CIN'},{name:'Chris Godwin Jr.',pos:'WR',team:'TB'},{name:'Quentin Johnston',pos:'WR',team:'LAC'},
+    {name:'Darren Waller',pos:'TE',team:'MIA'},{name:'Mark Andrews',pos:'TE',team:'BAL'},{name:'Kyle Pitts',pos:'TE',team:'ATL'},
+    {name:'Wil Lutz',pos:'K',team:'DEN'},{name:'Baltimore Ravens',pos:'DST',team:'BAL'}
+  ]},
+  { manager:'David', roster:[
+    {name:'Jared Goff',pos:'QB',team:'DET'},{name:'Caleb Williams',pos:'QB',team:'CHI'},
+    {name:'De\u2019Von Achane',pos:'RB',team:'MIA'},{name:'RJ Harvey',pos:'RB',team:'DEN'},{name:'Jaylen Warren',pos:'RB',team:'PIT'},{name:'Breece Hall',pos:'RB',team:'NYJ'},{name:'Quinshon Judkins',pos:'RB',team:'CLE'},
+    {name:'A.J. Brown',pos:'WR',team:'PHI'},{name:'Justin Jefferson',pos:'WR',team:'MIN'},{name:'Keenan Allen',pos:'WR',team:'LAC'},{name:'DK Metcalf',pos:'WR',team:'PIT'},
+    {name:'Tyler Warren',pos:'TE',team:'IND'},{name:'Dallas Goedert',pos:'TE',team:'PHI'},
+    {name:'Chase McLaughlin',pos:'K',team:'TB'},{name:'Jacksonville Jaguars',pos:'DST',team:'JAX'}
+  ]},
+  { manager:'Filip', roster:[
+    {name:'Drake Maye',pos:'QB',team:'NE'},
+    {name:'Saquon Barkley',pos:'RB',team:'PHI'},{name:'Chase Brown',pos:'RB',team:'CIN'},{name:'Kenny Gainwell',pos:'RB',team:'PIT'},{name:'Rhamondre Stevenson',pos:'RB',team:'NE'},{name:'Kenneth Walker III',pos:'RB',team:'SEA'},
+    {name:'Mike Evans',pos:'WR',team:'TB'},{name:'Nico Collins',pos:'WR',team:'HOU'},{name:'Zay Flowers',pos:'WR',team:'BAL'},{name:'Ladd McConkey',pos:'WR',team:'LAC'},{name:'Rashee Rice',pos:'WR',team:'KC'},
+    {name:'Brenton Strange',pos:'TE',team:'JAX'},{name:'Travis Kelce',pos:'TE',team:'KC'},
+    {name:'Ka\u2019imi Fairbairn',pos:'K',team:'HOU'},{name:'Pittsburgh Steelers',pos:'DST',team:'PIT'}
+  ]},
+  { manager:'Diego', roster:[
+    {name:'Brock Purdy',pos:'QB',team:'SF'},{name:'Justin Herbert',pos:'QB',team:'LAC'},
+    {name:'Josh Jacobs',pos:'RB',team:'GB'},{name:'Omarion Hampton',pos:'RB',team:'LAC'},{name:'D\u2019Andre Swift',pos:'RB',team:'CHI'},{name:'Jacory Croskey-Merritt',pos:'RB',team:'WAS'},
+    {name:'Puka Nacua',pos:'WR',team:'LAR'},{name:'Jaxon Smith-Njigba',pos:'WR',team:'SEA'},{name:'Ricky Pearsall',pos:'WR',team:'SF'},{name:'Wan\u2019Dale Robinson',pos:'WR',team:'NYG'},{name:'Rashid Shaheed',pos:'WR',team:'SEA'},
+    {name:'Harold Fannin Jr.',pos:'TE',team:'CLE'},{name:'Brock Bowers',pos:'TE',team:'LV'},
+    {name:'Cameron Dicker',pos:'K',team:'LAC'},{name:'New Orleans Saints',pos:'DST',team:'NO'}
+  ]},
+  { manager:'Oskar', roster:[
+    {name:'Dak Prescott',pos:'QB',team:'DAL'},{name:'Josh Allen',pos:'QB',team:'BUF'},
+    {name:'Bijan Robinson',pos:'RB',team:'ATL'},{name:'Woody Marks',pos:'RB',team:'HOU'},{name:'TreVeyon Henderson',pos:'RB',team:'NE'},{name:'Aaron Jones',pos:'RB',team:'MIN'},
+    {name:'Courtland Sutton',pos:'WR',team:'DEN'},{name:'Drake London',pos:'WR',team:'ATL'},{name:'Jakobi Meyers',pos:'WR',team:'JAX'},{name:'Jauan Jennings',pos:'WR',team:'SF'},{name:'Michael Pittman',pos:'WR',team:'IND'},
+    {name:'Trey McBride',pos:'TE',team:'ARI'},
+    {name:'Jason Myers',pos:'K',team:'SEA'},{name:'Denver Broncos',pos:'DST',team:'DEN'},{name:'Houston Texans',pos:'DST',team:'HOU'}
+  ]},
+  { manager:'oscar', roster:[
+    {name:'Jacoby Brissett',pos:'QB',team:'ARI'},{name:'Jayden Daniels',pos:'QB',team:'WAS'},{name:'Shedeur Sanders',pos:'QB',team:'CLE'},
+    {name:'Jonathan Taylor',pos:'RB',team:'IND'},{name:'Jahmyr Gibbs',pos:'RB',team:'DET'},{name:'Kyren Williams',pos:'RB',team:'LAR'},{name:'David Montgomery',pos:'RB',team:'DET'},
+    {name:'CeeDee Lamb',pos:'WR',team:'DAL'},{name:'Chris Olave',pos:'WR',team:'NO'},{name:'Rome Odunze',pos:'WR',team:'CHI'},
+    {name:'Hunter Henry',pos:'TE',team:'NE'},{name:'Dalton Kincaid',pos:'TE',team:'BUF'},
+    {name:'Brandon Aubrey',pos:'K',team:'DAL'},{name:'New England Patriots',pos:'DST',team:'NE'},{name:'Philadelphia Eagles',pos:'DST',team:'PHI'}
+  ]},
+  { manager:'Anders', roster:[
+    {name:'Matthew Stafford',pos:'QB',team:'LAR'},{name:'Bo Nix',pos:'QB',team:'DEN'},
+    {name:'Christian McCaffrey',pos:'RB',team:'SF'},{name:'Travis Etienne',pos:'RB',team:'JAX'},{name:'Kyle Monangai',pos:'RB',team:'CHI'},
+    {name:'Amon-Ra St. Brown',pos:'WR',team:'DET'},{name:'Jaylen Waddle',pos:'WR',team:'MIA'},{name:'Jameson Williams',pos:'WR',team:'DET'},{name:'Davante Adams',pos:'WR',team:'LAR'},{name:'Emeka Egbuka',pos:'WR',team:'TB'},{name:'Christian Watson',pos:'WR',team:'GB'},
+    {name:'George Kittle',pos:'TE',team:'SF'},
+    {name:'Cam Little',pos:'K',team:'JAX'},{name:'Buffalo Bills',pos:'DST',team:'BUF'},{name:'Los Angeles Rams',pos:'DST',team:'LAR'}
+  ]}
+];
+
 const RANK_PAGES = { QB:'Quarterbacks', RB:'Running backs', WR:'Wide receivers', TE:'Tight ends', K:'Kickers', DST:'Defense/Special Teams', ROOKIE:'Rookies' };
 
 const state = {};        // state[key] = {slots, rounds, picks:{"r-p":"Name (POS-TM)"}}
@@ -531,6 +599,14 @@ async function loadLeague(key){
   if(!data.pickHistory) data.pickHistory = [];
   if(!data.rosterSlots) data.rosterSlots = defaultRosterSlots();
   if(!data.keepers) data.keepers = Array.from({length:cfg.n}, ()=> ['','']);
+  // Migrering: om ett lagnamn fortfarande är ett oredigerat "Lag N" (från en äldre version av verktyget),
+  // uppdatera tyst till det riktiga lagnamnet. Namn du redan skrivit in själv rörs aldrig.
+  if(cfg.defaultSlotNames){
+    data.slots = data.slots.map((name, i) => {
+      const isGenericDefault = /^Lag \d+$/.test((name||'').trim());
+      return (isGenericDefault && cfg.defaultSlotNames[i]) ? cfg.defaultSlotNames[i] : name;
+    });
+  }
   state[key] = data;
 }
 
@@ -985,10 +1061,17 @@ function renderLegacyPage(){
         </div>
       `;
     }).join('');
+    const legacy = LEGACY_2025_ROSTERS[idx] || { manager:null, roster:[] };
+    const rosterHtml = legacy.roster.length ? legacy.roster.map(p => `
+      <div class="legacy-roster-row"><span class="pos-badge ${posClass(p.pos)}">${escapeHtml(p.pos)}</span> ${escapeHtml(p.name)} <span class="legacy-roster-team">${escapeHtml(p.team)}</span></div>
+    `).join('') : '<div class="legacy-roster-row empty">Roster saknas — lägg till manuellt om du vill (kommer i en senare uppdatering).</div>';
+
     return `
       <div class="card legacy-card">
         <div class="legacy-team-name">${escapeHtml(teamName)}</div>
-        <p class="legacy-hint">Lagnamn redigeras på Douchebag-fliken. Välj de två spelare laget behåller in i 2026 års draft — de markeras automatiskt som tagna och dyker upp på "Mitt lag"/"Alla lag".</p>
+        ${legacy.manager ? `<div class="legacy-manager">Manager: ${escapeHtml(legacy.manager)}</div>` : ''}
+        <div class="legacy-roster-list">${rosterHtml}</div>
+        <p class="legacy-hint">Välj de två spelare laget behåller in i 2026 års draft — de markeras automatiskt som tagna och dyker upp på "Mitt lag"/"Alla lag".</p>
         <div class="keeper-fields">${keeperInputs}</div>
       </div>
     `;
@@ -1378,6 +1461,9 @@ async function init(){
   renderLeaguePage('douche');
   Object.keys(RANK_PAGES).forEach(renderRankingPage);
   populatePlayerDatalist();
+  // Spara direkt om migreringen av lagnamn (Lag N -> riktigt namn) ändrade något
+  queueSave('balla');
+  queueSave('douche');
 }
 init().catch(showBootError);
 
