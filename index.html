@@ -368,17 +368,8 @@
   .legacy-roster-row{font-size:12px; color:var(--chalk); display:flex; align-items:center; gap:6px;}
   .legacy-roster-row.empty{font-style:italic; color:var(--chalk-dim);}
   .legacy-roster-team{font-family:'IBM Plex Mono',monospace; font-size:10.5px; color:var(--chalk-dim); margin-left:auto;}
-  .keeper-fields{display:flex; flex-direction:column; gap:10px;}
-  .keeper-field-label{font-family:'IBM Plex Mono',monospace; font-size:10.5px; letter-spacing:.04em; text-transform:uppercase; color:var(--chalk-dim); display:flex; align-items:center; gap:6px; margin-bottom:4px;}
-  .keeper-input{
-    width:100%; font-family:'IBM Plex Mono',monospace; font-size:13px; background:var(--bg); color:var(--chalk);
-    border:1px solid var(--line); border-radius:6px; padding:8px 10px;
-  }
-  .keeper-input:focus{border-color:var(--silver); outline:none;}
-  .keeper-tag{
-    font-family:'IBM Plex Mono',monospace; font-size:9.5px; font-weight:700; letter-spacing:.04em;
-    background:var(--silver); color:#0b0c0d; padding:2px 6px; border-radius:4px;
-  }
+  .legacy-roster-adp{font-family:'IBM Plex Mono',monospace; font-size:10.5px; color:var(--silver); white-space:nowrap;}
+  .legacy-roster-adp.na{color:var(--chalk-dim); font-style:italic;}
 
   footer{text-align:center; font-size:11px; color:var(--chalk-dim); margin-top:24px; font-family:'IBM Plex Mono',monospace;}
 </style>
@@ -580,6 +571,43 @@ let suggestBoxMouseDown = false;
 
 function storageKey(key){ return 'draft:' + key; }
 function formatPlayerLabel(p){ return `${p.name} (${p.pos}-${p.team})`; }
+
+function normPlayerName(fullName){
+  let parts = (fullName||'').trim().split(/\s+/).filter(Boolean);
+  const suffixes = new Set(['jr','sr','ii','iii','iv','v']);
+  while(parts.length > 1){
+    const tail = parts[parts.length-1].toLowerCase().replace(/\./g,'');
+    if(suffixes.has(tail)) parts.pop(); else break;
+  }
+  if(parts.length < 2) return (fullName||'').toLowerCase();
+  const firstRaw = parts[0].replace(/[^A-Za-z]/g,'');
+  const first = firstRaw ? firstRaw[0].toLowerCase() : '';
+  const last = parts.slice(1).join(' ').toLowerCase().replace(/[^a-z]/g,'');
+  return first + '|' + last;
+}
+
+let PLAYERS_INDEX = null;
+function buildPlayersIndex(){
+  PLAYERS_INDEX = new Map();
+  PLAYERS.forEach(p => {
+    const key1 = `${p.pos}|${p.team}|${normPlayerName(p.name)}`;
+    const key2 = `${p.pos}|${normPlayerName(p.name)}`;
+    PLAYERS_INDEX.set(key1, p);
+    if(!PLAYERS_INDEX.has(key2)) PLAYERS_INDEX.set(key2, p);
+  });
+}
+
+function findCurrentPlayer(legacyPlayer){
+  if(!PLAYERS_INDEX) buildPlayersIndex();
+  if(legacyPlayer.pos === 'DST'){
+    return PLAYERS.find(p => p.pos === 'DST' && p.team === legacyPlayer.team) || null;
+  }
+  const norm = normPlayerName(legacyPlayer.name);
+  return PLAYERS_INDEX.get(`${legacyPlayer.pos}|${legacyPlayer.team}|${norm}`)
+    || PLAYERS_INDEX.get(`${legacyPlayer.pos}|${norm}`)
+    || null;
+}
+
 function escapeHtml(str){
   return String(str).replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
 }
@@ -774,7 +802,7 @@ function renderRankingPage(cat){
   }
 
   const takenBalla = new Set(Object.values(state.balla.picks).filter(Boolean));
-  const takenDouche = new Set([...Object.values(state.douche.picks).filter(Boolean), ...getDoucheKeeperLabels()]);
+  const takenDouche = new Set(Object.values(state.douche.picks).filter(Boolean));
 
   const itemsHtml = players.map(p => {
     const label = formatPlayerLabel(p);
@@ -817,11 +845,6 @@ function getRosterForSlot(key, slotIdx){
   const cfg = LEAGUES[key];
   const data = state[key];
   const picks = [];
-  if(key === 'douche' && data.keepers && data.keepers[slotIdx]){
-    data.keepers[slotIdx].forEach((label, i) => {
-      if(label) picks.push({ round: 'K', overallPick: 'Keeper ' + (i+1), label, isKeeper: true });
-    });
-  }
   for(let r=1; r<=data.rounds; r++){
     for(let i=0; i<cfg.n; i++){
       if(cfg.order(r, i, cfg.n) - 1 === slotIdx){
@@ -930,7 +953,7 @@ function renderMyTeamPage(){
       const filled = !!p.label;
       return `
         <div class="myteam-row${filled?'':' empty'}">
-          <div class="myteam-round">${p.isKeeper ? `<span class="keeper-tag">KEEPER</span>` : `R${p.round} <span class="myteam-overall">#${p.overallPick}</span>`}</div>
+          <div class="myteam-round">R${p.round} <span class="myteam-overall">#${p.overallPick}</span></div>
           <div class="myteam-player">
             ${filled ? `<span class="myteam-name">${escapeHtml(parsed.name)}</span> <span class="myteam-pos pos-badge ${posClass(parsed.pos)}">${escapeHtml(parsed.pos)}</span> <span class="myteam-team">${escapeHtml(parsed.team)}</span>` : '<span class="myteam-name empty-slot">— inte draftad än —</span>'}
           </div>
@@ -965,7 +988,7 @@ function renderAllTeamsPage(){
       const isMe = data.myTeamIdx === slotIdx;
       const picksHtml = roster.filter(p => p.label).map(p => {
         const parsed = parsePlayerLabel(p.label);
-        return `<div class="allteams-pick"><span class="allteams-round">${p.isKeeper ? 'K' : 'R'+p.round}</span> ${escapeHtml(parsed.name)} <span class="allteams-pos pos-badge ${posClass(parsed.pos)}">${escapeHtml(parsed.pos)}</span></div>`;
+        return `<div class="allteams-pick"><span class="allteams-round">R${p.round}</span> ${escapeHtml(parsed.name)} <span class="allteams-pos pos-badge ${posClass(parsed.pos)}">${escapeHtml(parsed.pos)}</span></div>`;
       }).join('') || '<div class="allteams-pick empty">Inga val än</div>';
       return `
         <div class="allteams-team${isMe?' is-me':''}">
@@ -1035,13 +1058,6 @@ function populatePlayerDatalist(){
   dl.innerHTML = PLAYERS.map(p => `<option value="${escapeAttr(formatPlayerLabel(p))}"></option>`).join('');
 }
 
-function getDoucheKeeperLabels(){
-  const data = state.douche;
-  const set = new Set();
-  (data.keepers || []).forEach(pair => (pair||[]).forEach(v => { if(v) set.add(v); }));
-  return set;
-}
-
 function renderLegacyPage(){
   const el = document.getElementById('page-LEGACY2025');
   if(!el) return;
@@ -1049,53 +1065,33 @@ function renderLegacyPage(){
   const cfg = LEAGUES.douche;
 
   const cardsHtml = data.slots.map((teamName, idx) => {
-    const pair = data.keepers[idx] || ['',''];
-    const keeperInputs = [0,1].map(i => {
-      const val = pair[i] || '';
-      const parsed = val ? parsePlayerLabel(val) : null;
-      return `
-        <div class="keeper-field">
-          <label class="keeper-field-label">Keeper ${i+1}${parsed ? ` <span class="pos-badge ${posClass(parsed.pos)}">${escapeHtml(parsed.pos)}</span>` : ''}</label>
-          <input type="text" list="all-players-datalist" class="keeper-input" placeholder="Sök spelarnamn…"
-            value="${escapeAttr(val)}" data-action="update-keeper" data-idx="${idx}" data-slot="${i}" />
-        </div>
-      `;
-    }).join('');
     const legacy = LEGACY_2025_ROSTERS[idx] || { manager:null, roster:[] };
-    const rosterHtml = legacy.roster.length ? legacy.roster.map(p => `
-      <div class="legacy-roster-row"><span class="pos-badge ${posClass(p.pos)}">${escapeHtml(p.pos)}</span> ${escapeHtml(p.name)} <span class="legacy-roster-team">${escapeHtml(p.team)}</span></div>
-    `).join('') : '<div class="legacy-roster-row empty">Roster saknas — lägg till manuellt om du vill (kommer i en senare uppdatering).</div>';
+    const rosterHtml = legacy.roster.length ? legacy.roster.map(p => {
+      const current = findCurrentPlayer(p);
+      const adpHtml = current
+        ? `<span class="legacy-roster-adp">ADP ${escapeHtml(current.adp)}</span>`
+        : `<span class="legacy-roster-adp na">ej rankad</span>`;
+      return `
+      <div class="legacy-roster-row"><span class="pos-badge ${posClass(p.pos)}">${escapeHtml(p.pos)}</span> ${escapeHtml(p.name)} <span class="legacy-roster-team">${escapeHtml(p.team)}</span> ${adpHtml}</div>
+    `;
+    }).join('') : '<div class="legacy-roster-row empty">Roster saknas.</div>';
 
     return `
       <div class="card legacy-card">
         <div class="legacy-team-name">${escapeHtml(teamName)}</div>
         ${legacy.manager ? `<div class="legacy-manager">Manager: ${escapeHtml(legacy.manager)}</div>` : ''}
         <div class="legacy-roster-list">${rosterHtml}</div>
-        <p class="legacy-hint">Välj de två spelare laget behåller in i 2026 års draft — de markeras automatiskt som tagna och dyker upp på "Mitt lag"/"Alla lag".</p>
-        <div class="keeper-fields">${keeperInputs}</div>
       </div>
     `;
   }).join('');
 
   el.innerHTML = `
     <div class="card">
-      <h2>${cfg.name} — 2025 & Keepers</h2>
-      <p class="desc">Förra årets lag i Douchebag. Ni kör keepers: varje lag väljer två spelare från förra säsongen att behålla in i 2026 års draft. Sök fram spelarna nedan (samma spelarpool som draften).</p>
+      <h2>${cfg.name} — 2025</h2>
+      <p class="desc">Förra årets lag i Douchebag, till referens inför keeper-val i den vanliga draften. Dagens ADP visas bredvid varje spelare där den finns.</p>
     </div>
     <div class="legacy-grid">${cardsHtml}</div>
   `;
-}
-
-function updateKeeper(slotIdx, keeperSlot, value){
-  if(!state.douche.keepers) state.douche.keepers = Array.from({length:LEAGUES.douche.n}, ()=> ['','']);
-  if(!state.douche.keepers[slotIdx]) state.douche.keepers[slotIdx] = ['',''];
-  // Match against known players so free text still resolves to a valid label; store raw text if no exact match yet.
-  const match = PLAYERS.find(p => formatPlayerLabel(p) === value);
-  state.douche.keepers[slotIdx][keeperSlot] = match ? formatPlayerLabel(match) : value;
-  renderLegacyPage();
-  renderLeaguePage('douche');
-  Object.keys(RANK_PAGES).forEach(renderRankingPage);
-  queueSave('douche');
 }
 
 function addRosterSlot(key){
@@ -1179,7 +1175,7 @@ function updateMyTeam(key, value){
 }
 
 function resetLeague(key){
-  if(!confirm('Rensa alla spelarval och lagnamn för ' + LEAGUES[key].name + '? (Regler, keepers och 2025-data påverkas inte)')) return;
+  if(!confirm('Rensa alla spelarval och lagnamn för ' + LEAGUES[key].name + '? (Regler och 2025-data påverkas inte)')) return;
   const cfg = LEAGUES[key];
   const keepRosterSlots = state[key] && state[key].rosterSlots ? state[key].rosterSlots : defaultRosterSlots();
   const keepKeepers = state[key] && state[key].keepers ? state[key].keepers : Array.from({length:cfg.n}, ()=> ['','']);
@@ -1205,7 +1201,6 @@ function showSuggestions(input){
   const box = document.getElementById('global-suggest');
   const query = input.value.trim().toLowerCase();
   const taken = new Set(Object.values(state[key].picks).filter(Boolean));
-  if(key === 'douche') getDoucheKeeperLabels().forEach(v => taken.add(v));
 
   let matches = PLAYERS.filter(p => !taken.has(formatPlayerLabel(p)));
   if(query) matches = matches.filter(p => p.name.toLowerCase().includes(query) || p.team.toLowerCase().includes(query));
@@ -1335,9 +1330,6 @@ document.addEventListener('change', (e) => {
 
   const posCheck = e.target.closest('[data-action="toggle-slot-pos"]');
   if(posCheck){ toggleSlotPos(posCheck.dataset.league, parseInt(posCheck.dataset.idx,10), posCheck.dataset.pos, posCheck.checked); return; }
-
-  const keeperInput = e.target.closest('[data-action="update-keeper"]');
-  if(keeperInput){ updateKeeper(parseInt(keeperInput.dataset.idx,10), parseInt(keeperInput.dataset.slot,10), keeperInput.value); return; }
 
   if(e.target.id === 'import-file-input'){ importBackup(e.target.files[0]); e.target.value = ''; return; }
 });
