@@ -1269,9 +1269,19 @@ function pickPlayer(key, pickKey, playerLabel){
   if(!state[key].pickHistory) state[key].pickHistory = [];
   state[key].pickHistory.push({ pickKey, previousValue });
   state[key].picks[pickKey] = playerLabel;
-  playPickSound();
+  if(isMyPick(key, pickKey)) playPickSound();
   renderLeaguePage(key);
   queueSave(key);
+}
+
+function isMyPick(key, pickKey){
+  const data = state[key];
+  if(data.myTeamIdx === null || data.myTeamIdx === undefined) return false;
+  const cfg = LEAGUES[key];
+  const [rStr, iStr] = pickKey.split('-');
+  const round = parseInt(rStr, 10), i = parseInt(iStr, 10);
+  const slotIdx = cfg.order(round, i, cfg.n) - 1;
+  return slotIdx === data.myTeamIdx;
 }
 
 function playPickSound(){
