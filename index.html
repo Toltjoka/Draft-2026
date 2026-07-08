@@ -375,9 +375,14 @@
   }
 
   /* Ranking pages */
+  .rank-controls{display:flex; gap:8px; margin-bottom:12px; flex-wrap:wrap;}
   .rank-search{
-    width:100%; background:var(--panel-2); border:1px solid var(--line); border-radius:8px;
-    padding:9px 11px; color:var(--chalk); font-size:13px; margin-bottom:12px;
+    flex:1; min-width:160px; background:var(--panel-2); border:1px solid var(--line); border-radius:8px;
+    padding:9px 11px; color:var(--chalk); font-size:13px;
+  }
+  .rank-sort{
+    background:var(--panel-2); border:1px solid var(--line); border-radius:8px;
+    padding:9px 11px; color:var(--chalk); font-size:12.5px; font-family:'IBM Plex Mono',monospace;
   }
   .rank-count{font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--chalk-dim); margin-bottom:10px;}
   .rank-table{display:flex; flex-direction:column; gap:5px; max-height:70vh; overflow-y:auto;}
@@ -700,6 +705,7 @@ const RANK_PAGES = { QB:'Quarterbacks', RB:'Running backs', WR:'Wide receivers',
 
 const state = {};        // state[key] = {slots, rounds, picks:{"r-p":"Name (POS-TM)"}}
 const rankSearch = {};   // rankSearch[cat] = 'text'
+const rankSort = {};     // rankSort[cat] = 'adp' | 'ppr2025' | 'ppg2025'
 let currentPage = 'balla';
 let lastLeagueViewed = 'balla';
 let saveTimer = null;
@@ -1008,12 +1014,22 @@ function renderRankingPage(cat){
   const el = document.getElementById('page-'+cat);
   if(!el) return;
   const search = rankSearch[cat] || '';
+  const sort = rankSort[cat] || 'adp';
   const label = RANK_PAGES[cat];
 
   let players = cat === 'ROOKIE' ? PLAYERS.filter(p=>p.rookie) : PLAYERS.filter(p=>p.pos===cat);
   if(search){
     const q = search.toLowerCase();
     players = players.filter(p => p.name.toLowerCase().includes(q) || p.team.toLowerCase().includes(q));
+  }
+
+  if(sort === 'ppr2025' || sort === 'ppg2025'){
+    players = players.slice().sort((a, b) => {
+      const sa = find2025Stats(a), sb = find2025Stats(b);
+      const va = sa ? (sort === 'ppg2025' ? (sa.g > 0 ? sa.ppr / sa.g : 0) : sa.ppr) : -1;
+      const vb = sb ? (sort === 'ppg2025' ? (sb.g > 0 ? sb.ppr / sb.g : 0) : sb.ppr) : -1;
+      return vb - va;
+    });
   }
 
   const takenBalla = new Set(Object.values(state.balla.picks).filter(Boolean));
@@ -1040,7 +1056,14 @@ function renderRankingPage(cat){
     <div class="card">
       <h2>${label}</h2>
       <p class="desc">Fullständig 4for4-ranking. Överstruken spelare = tagen i ${LEAGUES[lastLeagueViewed] ? LEAGUES[lastLeagueViewed].name : LEAGUES.balla.name} (ligan du senast var inne på). 2025-stats visas där de finns (QB/RB/WR/TE).</p>
-      <input class="rank-search" type="text" placeholder="Sök spelare eller lag…" value="${escapeAttr(search)}" data-action="rank-search" data-cat="${cat}" />
+      <div class="rank-controls">
+        <input class="rank-search" type="text" placeholder="Sök spelare eller lag…" value="${escapeAttr(search)}" data-action="rank-search" data-cat="${cat}" />
+        <select class="rank-sort" data-action="rank-sort" data-cat="${cat}">
+          <option value="adp" ${sort==='adp'?'selected':''}>Sortera: Ranking (ADP)</option>
+          <option value="ppr2025" ${sort==='ppr2025'?'selected':''}>Sortera: Bäst 2025 (totalt)</option>
+          <option value="ppg2025" ${sort==='ppg2025'?'selected':''}>Sortera: Bäst 2025 (per match)</option>
+        </select>
+      </div>
       <div class="rank-count">${players.length} spelare</div>
       <div class="rank-table">${itemsHtml || '<div class="suggest-empty">Inga spelare matchar.</div>'}</div>
     </div>
@@ -1592,6 +1615,9 @@ document.addEventListener('change', (e) => {
 
   const themePicker = e.target.closest('[data-action="switch-theme"]');
   if(themePicker){ switchTheme(themePicker.value); return; }
+
+  const rankSortSelect = e.target.closest('[data-action="rank-sort"]');
+  if(rankSortSelect){ rankSort[rankSortSelect.dataset.cat] = rankSortSelect.value; renderRankingPage(rankSortSelect.dataset.cat); return; }
 
   const slotLabelInput = e.target.closest('[data-action="update-slot-label"]');
   if(slotLabelInput){ updateSlotLabel(slotLabelInput.dataset.league, parseInt(slotLabelInput.dataset.idx,10), slotLabelInput.value); return; }
