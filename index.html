@@ -763,6 +763,7 @@ function switchPage(page){
   if(page === 'ALLTEAMS') renderAllTeamsPage();
   if(page === 'RULES') renderRulesPage();
   if(page === 'LEGACY2025') renderLegacyPage();
+  if(page === 'balla' || page === 'douche') scrollToCurrentPick(page);
 }
 
 function getRoundDirection(cfg, round){ return cfg.order(round, 0, cfg.n) === 1 ? 'asc' : 'desc'; }
@@ -840,7 +841,7 @@ function renderLeaguePage(key){
       const val = data.picks[pickKey] || '';
       const isCurrent = pickKey === currentKey;
       cells += `
-        <td class="pick-cell${isCurrent ? ' current' : ''}" data-league="${key}" data-pick-key="${pickKey}">
+        <td class="pick-cell${isCurrent ? ' current' : ''}" ${isCurrent ? `id="current-pick-cell-${key}"` : ''} data-league="${key}" data-pick-key="${pickKey}">
           <div class="cell-inner">
             <div class="cell-top">
               <span class="team-name" title="${escapeAttr(teamName)}">${escapeHtml(teamName)}</span>
@@ -896,6 +897,18 @@ function renderLeaguePage(key){
       </div>
     </div>
   `;
+
+  scrollToCurrentPick(key);
+}
+
+function scrollToCurrentPick(key){
+  requestAnimationFrame(() => {
+    const pageEl = document.getElementById('page-'+key);
+    if(pageEl && pageEl.classList.contains('active')){
+      const cell = document.getElementById('current-pick-cell-'+key);
+      if(cell) cell.scrollIntoView({behavior:'smooth', block:'center'});
+    }
+  });
 }
 
 function renderRankingPage(cat){
