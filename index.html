@@ -52,6 +52,66 @@
     --grad1: #0a2a5e;
     --grad2: #001233;
   }
+  /* New England Patriots palette: Navy, Red, Silver */
+  body[data-theme="patriots"]{
+    --bg: #0a1128;
+    --panel: #0f1d3d;
+    --panel-2: #16274d;
+    --line: #2a3f6b;
+    --chalk: #ffffff;
+    --chalk-dim: #a8b8d8;
+    --silver: #c60c30;
+    --silver-dim: #8f0a22;
+    --black-panel: #050a1a;
+    --shadow: rgba(0,0,0,.5);
+    --grad1: #16274d;
+    --grad2: #0a1128;
+  }
+  /* New Orleans Saints palette: Black & Old Gold */
+  body[data-theme="saints"]{
+    --bg: #0d0d0d;
+    --panel: #1a1a1a;
+    --panel-2: #262626;
+    --line: #4a3c1a;
+    --chalk: #ffffff;
+    --chalk-dim: #c9b896;
+    --silver: #d4af37;
+    --silver-dim: #a5842a;
+    --black-panel: #000000;
+    --shadow: rgba(0,0,0,.6);
+    --grad1: #262626;
+    --grad2: #0d0d0d;
+  }
+  /* Arsenal FC palette: Red & White, "Gunners" */
+  body[data-theme="arsenal"]{
+    --bg: #190508;
+    --panel: #2a0a0f;
+    --panel-2: #3d0f16;
+    --line: #6b1f28;
+    --chalk: #ffffff;
+    --chalk-dim: #e3b8bd;
+    --silver: #ef0107;
+    --silver-dim: #a5000a;
+    --black-panel: #0c0405;
+    --shadow: rgba(0,0,0,.55);
+    --grad1: #3d0f16;
+    --grad2: #190508;
+  }
+  /* FC København palette: Sky Blue & White */
+  body[data-theme="fck"]{
+    --bg: #041c2c;
+    --panel: #072a40;
+    --panel-2: #0d3b57;
+    --line: #1c5b7d;
+    --chalk: #ffffff;
+    --chalk-dim: #a8d0e0;
+    --silver: #4fc3f7;
+    --silver-dim: #2f96c2;
+    --black-panel: #021018;
+    --shadow: rgba(0,0,0,.5);
+    --grad1: #0d3b57;
+    --grad2: #041c2c;
+  }
   *{box-sizing:border-box;}
   html,body{margin:0;padding:0;}
   body{
@@ -430,6 +490,10 @@
           <option value="eagles">Philadelphia Eagles</option>
           <option value="sunderland">Sunderland AFC</option>
           <option value="chargers">LA Chargers</option>
+          <option value="patriots">New England Patriots</option>
+          <option value="saints">New Orleans Saints</option>
+          <option value="arsenal">Arsenal</option>
+          <option value="fck">FC København</option>
         </select>
       </label>
     </div>
@@ -1623,7 +1687,11 @@ function importBackupFromText(text){
 const THEMES = {
   eagles: { label:'Philadelphia Eagles', eyebrow:'Två ligor · Snake Draft · Philadelphia Eagles Edition' },
   sunderland: { label:'Sunderland AFC', eyebrow:'Två ligor · Snake Draft · Sunderland AFC Edition' },
-  chargers: { label:'LA Chargers', eyebrow:'Två ligor · Snake Draft · LA Chargers Edition' }
+  chargers: { label:'LA Chargers', eyebrow:'Två ligor · Snake Draft · LA Chargers Edition' },
+  patriots: { label:'New England Patriots', eyebrow:'Två ligor · Snake Draft · New England Patriots Edition' },
+  saints: { label:'New Orleans Saints', eyebrow:'Två ligor · Snake Draft · New Orleans Saints Edition' },
+  arsenal: { label:'Arsenal', eyebrow:'Två ligor · Snake Draft · Arsenal Edition' },
+  fck: { label:'FC København', eyebrow:'Två ligor · Snake Draft · FC København Edition' }
 };
 
 function applyTheme(themeId){
