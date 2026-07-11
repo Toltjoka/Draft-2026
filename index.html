@@ -215,6 +215,25 @@
   }
   .backup-modal-actions{display:flex; align-items:center; gap:10px;}
 
+  /* Turn popup */
+  .turn-popup-modal{max-width:480px;}
+  .turn-popup-sub{font-family:'IBM Plex Mono',monospace; font-size:12px; color:var(--chalk-dim); margin:0;}
+  .turn-popup-needs{font-size:13px; color:var(--silver); margin:0; font-weight:600;}
+  .turn-popup-list{display:flex; flex-direction:column; gap:8px; max-height:50vh; overflow-y:auto;}
+  .turn-pick-row{
+    display:flex; align-items:center; justify-content:space-between; gap:10px;
+    background:var(--panel-2); border:1px solid var(--line); border-radius:8px; padding:9px 11px;
+  }
+  .turn-pick-info{display:flex; align-items:center; gap:6px; flex-wrap:wrap; font-size:13px;}
+  .turn-pick-name{font-weight:600;}
+  .turn-pick-team{font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--chalk-dim);}
+  .turn-pick-adp{font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--chalk-dim);}
+  .turn-pick-need{
+    font-family:'IBM Plex Mono',monospace; font-size:10px; font-weight:700; color:#0b0c0d;
+    background:var(--silver); padding:2px 6px; border-radius:4px;
+  }
+  .turn-pick-btn{flex-shrink:0; padding:6px 14px;}
+
   /* Mitt lag / Alla lag */
   .nav-btn-myteam{font-weight:700;}
   .league-toggle{display:flex; gap:8px; margin-bottom:16px; flex-wrap:wrap;}
@@ -575,6 +594,16 @@
         <button class="backup-btn" data-action="import-backup-text">⬆ Importera från text</button>
         <span id="backup-modal-copy-status" class="backup-status"></span>
       </div>
+    </div>
+  </div>
+
+  <div id="turn-popup-overlay" class="backup-modal-overlay">
+    <div class="backup-modal turn-popup-modal">
+      <div class="backup-modal-head">
+        <strong>🏈 Din tur!</strong>
+        <button class="backup-btn" data-action="close-turn-popup">✕ Stäng</button>
+      </div>
+      <div id="turn-popup-body"></div>
     </div>
   </div>
 
@@ -1107,6 +1136,7 @@ function renderLeaguePage(key){
   `;
 
   scrollToCurrentPick(key);
+  maybeShowTurnPopup(key);
 }
 
 function scrollToCurrentPick(key){
@@ -1117,6 +1147,72 @@ function scrollToCurrentPick(key){
       if(cell) cell.scrollIntoView({behavior:'smooth', block:'center'});
     }
   });
+}
+
+const shownTurnPopups = {};
+function maybeShowTurnPopup(key){
+  const data = state[key];
+  if(data.myTeamIdx === null || data.myTeamIdx === undefined) return;
+  const currentKey = findCurrentPick(key);
+  if(!currentKey) return;
+  if(!isMyPick(key, currentKey)) return;
+  const popupKey = key + ':' + currentKey;
+  if(shownTurnPopups[popupKey]) return;
+  shownTurnPopups[popupKey] = true;
+  showTurnPopup(key, currentKey);
+}
+
+function getNeededPositions(key){
+  const data = state[key];
+  const needed = new Set();
+  if(data.myTeamIdx === null || data.myTeamIdx === undefined || !data.rosterSlots) return needed;
+  const roster = getRosterForSlot(key, data.myTeamIdx);
+  const { template } = buildStartingLineup(data.rosterSlots, roster);
+  template.forEach(s => { if(!s.player) s.pos.forEach(pp => needed.add(pp)); });
+  return needed;
+}
+
+function showTurnPopup(key, pickKey){
+  const cfg = LEAGUES[key];
+  const data = state[key];
+  const [rStr, iStr] = pickKey.split('-');
+  const round = parseInt(rStr,10), i = parseInt(iStr,10);
+  const overallPick = (round-1)*cfg.n + i + 1;
+
+  const taken = new Set(Object.values(data.picks).filter(Boolean));
+  const available = PLAYERS.filter(p => !taken.has(formatPlayerLabel(p)));
+  const needed = getNeededPositions(key);
+  const top5 = available.slice(0, 5);
+
+  const rowsHtml = top5.map(p => {
+    const fillsNeed = needed.has(p.pos);
+    return `
+      <div class="turn-pick-row">
+        <div class="turn-pick-info">
+          <span class="pos-badge ${posClass(p.pos)}">${escapeHtml(p.pos)}</span>
+          <span class="turn-pick-name">${escapeHtml(p.name)}</span>
+          <span class="turn-pick-team">${escapeHtml(p.team)}</span>
+          ${fillsNeed ? '<span class="turn-pick-need">✓ Fyller behov</span>' : ''}
+          <span class="turn-pick-adp">ADP ${escapeHtml(p.adp)}</span>
+        </div>
+        <button class="btn turn-pick-btn" data-action="draft-from-popup" data-league="${key}" data-pick-key="${pickKey}" data-label="${escapeAttr(formatPlayerLabel(p))}">Draft</button>
+      </div>
+    `;
+  }).join('');
+
+  const neededListHtml = needed.size ? `<p class="turn-popup-needs">Din trupp behöver just nu: ${[...needed].join(', ')}</p>` : '<p class="turn-popup-needs">Startlaget är fyllt — dags att fylla bänken.</p>';
+
+  const body = document.getElementById('turn-popup-body');
+  body.innerHTML = `
+    <p class="turn-popup-sub">Runda ${round} · Pick #${overallPick} (${cfg.name})</p>
+    ${neededListHtml}
+    <div class="turn-popup-list">${rowsHtml}</div>
+  `;
+  document.getElementById('turn-popup-overlay').classList.add('show');
+}
+
+function hideTurnPopup(){
+  document.getElementById('turn-popup-overlay').classList.remove('show');
 }
 
 let allPlayersPosFilter = new Set(POS_OPTIONS);
@@ -1726,6 +1822,16 @@ document.addEventListener('click', (e) => {
   const closeModalBtn = e.target.closest('[data-action="close-backup-modal"]');
   if(closeModalBtn){ hideBackupModal(); return; }
 
+  const closeTurnPopupBtn = e.target.closest('[data-action="close-turn-popup"]');
+  if(closeTurnPopupBtn){ hideTurnPopup(); return; }
+
+  const draftFromPopupBtn = e.target.closest('[data-action="draft-from-popup"]');
+  if(draftFromPopupBtn){
+    pickPlayer(draftFromPopupBtn.dataset.league, draftFromPopupBtn.dataset.pickKey, draftFromPopupBtn.dataset.label);
+    hideTurnPopup();
+    return;
+  }
+
   const copyBtn = e.target.closest('[data-action="copy-backup-text"]');
   if(copyBtn){ copyBackupText(); return; }
 
@@ -1733,6 +1839,8 @@ document.addEventListener('click', (e) => {
   if(importTextBtn){ importBackupFromText(document.getElementById('backup-modal-textarea').value); return; }
 
   if(e.target.id === 'backup-modal-overlay'){ hideBackupModal(); return; }
+
+  if(e.target.id === 'turn-popup-overlay'){ hideTurnPopup(); return; }
 
   const suggestRow = e.target.closest('.suggest-row');
   if(suggestRow){
