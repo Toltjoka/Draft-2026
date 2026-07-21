@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Draftboard — Snake Draft</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap');
 
@@ -547,6 +548,30 @@
   .legacy-roster-adp.na{color:var(--chalk-dim); font-style:italic;}
 
   footer{text-align:center; font-size:11px; color:var(--chalk-dim); margin-top:24px; font-family:'IBM Plex Mono',monospace;}
+
+  /* Admin-inloggning */
+  .admin-bar{
+    display:flex; align-items:center; justify-content:center; gap:10px; flex-wrap:wrap;
+    font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--chalk-dim);
+    margin:0 0 14px; padding:8px 12px; background:var(--black-panel); border:1px solid var(--line); border-radius:999px;
+    max-width:520px; margin-left:auto; margin-right:auto;
+  }
+  .admin-bar input{
+    background:var(--panel-2); border:1px solid var(--line); border-radius:6px; color:var(--chalk);
+    padding:5px 8px; font-family:'IBM Plex Mono',monospace; font-size:11px; width:90px; text-align:center;
+  }
+  .admin-bar .btn{ padding:5px 10px; font-size:10px; }
+  .admin-status{ display:flex; align-items:center; gap:6px; }
+  .admin-dot{ width:8px; height:8px; border-radius:50%; background:#7c8688; }
+  .admin-dot.live{ background:#4fd67a; }
+  body.is-admin .admin-dot{ background:#f5c542; }
+  .viewer-note{ font-size:10px; color:var(--chalk-dim); }
+
+  /* Icke-admin: se allt, men kan inte redigera draften */
+  body:not(.is-admin) .admin-write{
+    pointer-events:none; opacity:.55; filter:grayscale(.3);
+  }
+  body:not(.is-admin) .admin-write-btn{ display:none; }
 </style>
 </head>
 <body>
@@ -573,13 +598,27 @@
     </div>
     <div class="backup-row">
       <button class="backup-btn" data-action="export-backup">💾 Exportera backup</button>
-      <button class="backup-btn" data-action="import-backup">📂 Importera backup</button>
+      <button class="backup-btn admin-write admin-write-btn" data-action="import-backup">📂 Importera backup</button>
       <input type="file" id="import-file-input" accept="application/json" style="display:none;">
       <span id="backup-status" class="backup-status"></span>
     </div>
   </header>
 
   <div id="boot-error"><strong>Något gick fel</strong><span id="boot-error-msg"></span></div>
+
+  <div class="admin-bar" id="admin-bar">
+    <span class="admin-status"><span class="admin-dot" id="admin-dot"></span><span id="admin-status-text">Ansluter…</span></span>
+    <span id="admin-login-controls">
+      <button class="btn" data-action="admin-send-code">Logga in som admin</button>
+    </span>
+    <span id="admin-code-controls" style="display:none;">
+      <input type="text" inputmode="numeric" maxlength="6" placeholder="Kod från mejl" id="admin-code-input" />
+      <button class="btn" data-action="admin-verify-code">Verifiera</button>
+    </span>
+    <span id="admin-logout-controls" style="display:none;">
+      <button class="btn" data-action="admin-logout">Logga ut</button>
+    </span>
+  </div>
 
   <div id="backup-modal-overlay" class="backup-modal-overlay">
     <div class="backup-modal">
@@ -591,7 +630,7 @@
       <textarea id="backup-modal-textarea" class="backup-modal-textarea"></textarea>
       <div class="backup-modal-actions">
         <button class="backup-btn" data-action="copy-backup-text">📋 Kopiera text</button>
-        <button class="backup-btn" data-action="import-backup-text">⬆ Importera från text</button>
+        <button class="backup-btn admin-write admin-write-btn" data-action="import-backup-text">⬆ Importera från text</button>
         <span id="backup-modal-copy-status" class="backup-status"></span>
       </div>
     </div>
@@ -918,13 +957,131 @@ function escapeHtml(str){
 }
 function escapeAttr(str){ return escapeHtml(str); }
 
+// ---- Supabase: delad draft online ----
+const SUPABASE_URL = 'https://fajtxhxwvnuhfkytdcqi.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_Bj34twqhrvwdbcUvdjCAvw_6Ma8zOAL';
+const ADMIN_EMAIL = 'lindahl.pierre@gmail.com';
+let sb = null;
+let isAdmin = false;
+let supabaseReady = false;
+try{
+  if(window.supabase && window.supabase.createClient){
+    sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+    supabaseReady = true;
+  }
+}catch(e){ console.error('Supabase init failed', e); }
+
+function setAdminUI(status){
+  const dot = document.getElementById('admin-dot');
+  const text = document.getElementById('admin-status-text');
+  const loginC = document.getElementById('admin-login-controls');
+  const codeC = document.getElementById('admin-code-controls');
+  const logoutC = document.getElementById('admin-logout-controls');
+  if(!dot) return;
+  document.body.classList.toggle('is-admin', isAdmin);
+  if(status === 'awaiting-code'){
+    if(text) text.textContent = 'Kod skickad till admin-mejlen';
+    if(loginC) loginC.style.display = 'none';
+    if(codeC) codeC.style.display = '';
+    if(logoutC) logoutC.style.display = 'none';
+  } else if(isAdmin){
+    dot.classList.add('live');
+    if(text) text.textContent = 'Inloggad som admin — du kan draft:a';
+    if(loginC) loginC.style.display = 'none';
+    if(codeC) codeC.style.display = 'none';
+    if(logoutC) logoutC.style.display = '';
+  } else {
+    dot.classList.add('live');
+    if(text) text.textContent = 'Visningsläge — endast admin kan draft:a';
+    if(loginC) loginC.style.display = '';
+    if(codeC) codeC.style.display = 'none';
+    if(logoutC) logoutC.style.display = 'none';
+  }
+}
+
+async function adminSendCode(){
+  if(!sb) return;
+  const text = document.getElementById('admin-status-text');
+  if(text) text.textContent = 'Skickar kod…';
+  const { error } = await sb.auth.signInWithOtp({ email: ADMIN_EMAIL });
+  if(error){ if(text) text.textContent = 'Kunde inte skicka kod: ' + error.message; return; }
+  setAdminUI('awaiting-code');
+}
+
+async function adminVerifyCode(){
+  if(!sb) return;
+  const input = document.getElementById('admin-code-input');
+  const code = input ? input.value.trim() : '';
+  if(!code) return;
+  const { data, error } = await sb.auth.verifyOtp({ email: ADMIN_EMAIL, token: code, type: 'email' });
+  if(error){
+    const text = document.getElementById('admin-status-text');
+    if(text) text.textContent = 'Fel kod, försök igen';
+    return;
+  }
+  isAdmin = !!(data && data.user && data.user.email === ADMIN_EMAIL);
+  setAdminUI();
+}
+
+async function adminLogout(){
+  if(!sb) return;
+  await sb.auth.signOut();
+  isAdmin = false;
+  setAdminUI();
+}
+
+async function checkAdminSession(){
+  if(!sb) return;
+  const { data } = await sb.auth.getSession();
+  isAdmin = !!(data && data.session && data.session.user && data.session.user.email === ADMIN_EMAIL);
+  setAdminUI();
+}
+
+async function fetchSharedState(key){
+  if(!sb) return null;
+  try{
+    const { data, error } = await sb.from('draft_state').select('data').eq('league_key', key).maybeSingle();
+    if(error || !data) return null;
+    return data.data;
+  }catch(e){ return null; }
+}
+
+async function pushSharedState(key){
+  if(!sb || !isAdmin) return;
+  try{
+    await sb.from('draft_state').upsert({ league_key: key, data: state[key], updated_at: new Date().toISOString() });
+  }catch(e){ console.error('Kunde inte synka till Supabase', e); }
+}
+
+function subscribeSharedState(){
+  if(!sb) return;
+  sb.channel('draft_state_changes')
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'draft_state' }, (payload) => {
+      const row = payload.new;
+      if(!row || !row.league_key) return;
+      // Om vi själva just skrev (admin), hoppa över för att undvika att skriva över lokala inputs medan man skriver
+      if(isAdmin && document.activeElement && document.activeElement.tagName === 'INPUT') return;
+      state[row.league_key] = row.data;
+      renderLeaguePage(row.league_key);
+      Object.keys(RANK_PAGES).forEach(renderRankingPage);
+      if(document.getElementById('page-MYTEAM')) renderMyTeamPage();
+      if(document.getElementById('page-ALLTEAMS')) renderAllTeamsPage();
+    })
+    .subscribe();
+}
+
 async function loadLeague(key){
   const cfg = LEAGUES[key];
   let data = null;
+  const shared = await fetchSharedState(key);
+  if(shared){
+    data = shared;
+  } else {
   try{
     const raw = localStorage.getItem(storageKey(key));
     if(raw) data = JSON.parse(raw);
   }catch(e){ /* nothing saved yet, use defaults */ }
+  }
   if(!data){
     const slotNames = cfg.defaultSlotNames || Array.from({length:cfg.n}, (_,i)=> 'Lag ' + (i+1));
     data = { slots: slotNames.slice(), rounds: cfg.defaultRounds, picks: {}, pickHistory: [], rosterSlots: defaultRosterSlots(), keepers: Array.from({length:cfg.n}, ()=> ['','']) };
@@ -964,6 +1121,7 @@ function queueSave(key){
       const ind = document.getElementById('save-'+key);
       if(ind){ ind.textContent = '⚠ Sparades inte just nu — dina val finns kvar i sessionen'; ind.classList.add('show'); }
     }
+    pushSharedState(key);
   }, 300);
 }
 
@@ -1033,7 +1191,7 @@ function renderLeaguePage(key){
     return `
     <div class="slot-field">
       <label>Position ${i+1}</label>
-      <select data-action="update-slot" data-league="${key}" data-idx="${i}">
+      <select class="admin-write" data-action="update-slot" data-league="${key}" data-idx="${i}">
         ${optionsHtml}
         <option value="__custom__">✏️ Annat namn…</option>
       </select>
@@ -1084,7 +1242,7 @@ function renderLeaguePage(key){
               <span class="team-name" title="${escapeAttr(teamName)}">${escapeHtml(teamName)}</span>
               <span class="pick-num">#${overallPick}</span>
             </div>
-            <input class="player-search" type="text" autocomplete="off" placeholder="Sök spelare…" value="${escapeAttr(val)}"
+            <input class="player-search admin-write" type="text" autocomplete="off" placeholder="Sök spelare…" value="${escapeAttr(val)}"
               data-action="player-search" data-league="${key}" data-pick-key="${pickKey}" />
           </div>
         </td>
@@ -1106,19 +1264,19 @@ function renderLeaguePage(key){
       <div class="controls-row">
         <div class="rounds-control">
           Antal rundor:
-          <input type="number" min="1" max="30" value="${data.rounds}" data-action="update-rounds" data-league="${key}" />
+          <input class="admin-write" type="number" min="1" max="30" value="${data.rounds}" data-action="update-rounds" data-league="${key}" />
         </div>
         <div class="rounds-control">
           Jag är:
-          <select data-action="update-myteam" data-league="${key}">
+          <select class="admin-write" data-action="update-myteam" data-league="${key}">
             <option value="">– välj lag –</option>
             ${data.slots.map((name,i)=> `<option value="${i}" ${data.myTeamIdx===i?'selected':''}>${escapeHtml(name)}</option>`).join('')}
           </select>
         </div>
         <div style="display:flex; align-items:center; gap:10px;">
           <span class="save-indicator" id="save-${key}">✓ Sparat</span>
-          <button class="btn" data-action="undo-pick" data-league="${key}" ${(!data.pickHistory || !data.pickHistory.length) ? 'disabled' : ''}>↶ Ångra senaste val</button>
-          <button class="btn" data-action="reset-league" data-league="${key}">Rensa liga</button>
+          <button class="btn admin-write admin-write-btn" data-action="undo-pick" data-league="${key}" ${(!data.pickHistory || !data.pickHistory.length) ? 'disabled' : ''}>↶ Ångra senaste val</button>
+          <button class="btn admin-write admin-write-btn" data-action="reset-league" data-league="${key}">Rensa liga</button>
         </div>
       </div>
     </div>
@@ -1554,8 +1712,8 @@ function renderRulesPage(){
       <div class="card">
         <h2>${cfg.name}</h2>
         <p class="desc">Startplatser fylls i ordningen de listas nedan (specifika positioner före FLEX-slots). Resten av rundorna hamnar automatiskt på bänken.</p>
-        <div class="rules-list">${rowsHtml}</div>
-        <div class="rules-actions">
+        <div class="rules-list admin-write">${rowsHtml}</div>
+        <div class="rules-actions admin-write">
           <button class="btn" data-action="add-slot" data-league="${key}">+ Lägg till slot</button>
           <button class="btn" data-action="reset-slots" data-league="${key}">Återställ till standard</button>
           <span class="rules-bench-info">Startplatser: ${startersCount} · Bänk: ${bench} (av ${data.rounds} rundor totalt)</span>
@@ -1609,7 +1767,16 @@ function renderLegacyPage(){
   `;
 }
 
+function requireAdmin(){
+  if(sb && !isAdmin){
+    alert('Bara admin kan ändra draften. Logga in uppe till vänster.');
+    return false;
+  }
+  return true;
+}
+
 function addRosterSlot(key){
+  if(!requireAdmin()) return;
   if(!state[key].rosterSlots) state[key].rosterSlots = defaultRosterSlots();
   state[key].rosterSlots.push({ slot:'SLOT'+Date.now(), label:'Ny slot', pos:['RB','WR'] });
   renderRulesPage();
@@ -1617,17 +1784,20 @@ function addRosterSlot(key){
 }
 
 function removeRosterSlot(key, idx){
+  if(!requireAdmin()) return;
   state[key].rosterSlots.splice(idx, 1);
   renderRulesPage();
   queueSave(key);
 }
 
 function updateSlotLabel(key, idx, value){
+  if(!requireAdmin()) return;
   state[key].rosterSlots[idx].label = value;
   queueSave(key);
 }
 
 function toggleSlotPos(key, idx, pos, checked){
+  if(!requireAdmin()) return;
   const slot = state[key].rosterSlots[idx];
   if(checked){
     if(!slot.pos.includes(pos)) slot.pos.push(pos);
@@ -1639,6 +1809,7 @@ function toggleSlotPos(key, idx, pos, checked){
 }
 
 function resetRosterSlotsToDefault(key){
+  if(!requireAdmin()) return;
   if(!confirm('Återställ rosterkraven för ' + LEAGUES[key].name + ' till standard (1 QB/2 RB/2 WR/1 TE/FLEX/K/DEF)?')) return;
   state[key].rosterSlots = defaultRosterSlots();
   renderRulesPage();
@@ -1647,6 +1818,7 @@ function resetRosterSlotsToDefault(key){
 
 
 function pickPlayer(key, pickKey, playerLabel){
+  if(!requireAdmin()) return;
   const previousValue = state[key].picks[pickKey] || null;
   if(!state[key].pickHistory) state[key].pickHistory = [];
   state[key].pickHistory.push({ pickKey, previousValue });
@@ -1690,6 +1862,7 @@ function announceValuePick(){
 }
 
 function undoPick(key){
+  if(!requireAdmin()) return;
   const history = state[key].pickHistory;
   if(!history || !history.length) return;
   const last = history.pop();
@@ -1703,12 +1876,14 @@ function undoPick(key){
 }
 
 function updateSlot(key, idx, value){
+  if(!requireAdmin()) return;
   state[key].slots[idx] = value || ('Lag ' + (idx+1));
   renderLeaguePage(key);
   queueSave(key);
 }
 
 function updateRounds(key, value){
+  if(!requireAdmin()) return;
   let n = parseInt(value, 10);
   if(isNaN(n) || n < 1) n = 1;
   if(n > 30) n = 30;
@@ -1718,12 +1893,14 @@ function updateRounds(key, value){
 }
 
 function updateMyTeam(key, value){
+  if(!requireAdmin()) return;
   state[key].myTeamIdx = (value === '' || value === null || value === undefined) ? null : parseInt(value, 10);
   renderLeaguePage(key);
   queueSave(key);
 }
 
 function resetLeague(key){
+  if(!requireAdmin()) return;
   if(!confirm('Rensa alla spelarval och lagnamn för ' + LEAGUES[key].name + '? (Regler och 2025-data påverkas inte)')) return;
   const cfg = LEAGUES[key];
   const keepRosterSlots = state[key] && state[key].rosterSlots ? state[key].rosterSlots : defaultRosterSlots();
@@ -1773,6 +1950,15 @@ function hideSuggestions(){
 // ---- Event delegation ----
 
 document.addEventListener('click', (e) => {
+  const adminSend = e.target.closest('[data-action="admin-send-code"]');
+  if(adminSend){ adminSendCode(); return; }
+
+  const adminVerify = e.target.closest('[data-action="admin-verify-code"]');
+  if(adminVerify){ adminVerifyCode(); return; }
+
+  const adminLogoutBtn = e.target.closest('[data-action="admin-logout"]');
+  if(adminLogoutBtn){ adminLogout(); return; }
+
   const navBtn = e.target.closest('[data-action="switch-page"]');
   if(navBtn){ switchPage(navBtn.dataset.page); return; }
 
@@ -2009,6 +2195,7 @@ async function copyBackupText(){
 }
 
 function applyBackupData(data, status){
+  if(!requireAdmin()) return;
   if(data.balla){ state.balla = data.balla; if(!state.balla.pickHistory) state.balla.pickHistory = []; if(!state.balla.rosterSlots) state.balla.rosterSlots = defaultRosterSlots(); }
   if(data.douche){ state.douche = data.douche; if(!state.douche.pickHistory) state.douche.pickHistory = []; if(!state.douche.rosterSlots) state.douche.rosterSlots = defaultRosterSlots(); if(!state.douche.keepers) state.douche.keepers = Array.from({length:LEAGUES.douche.n}, ()=> ['','']); }
   renderLeaguePage('balla');
@@ -2105,6 +2292,16 @@ async function init(){
   loadTheme();
   updateLegacyTabVisibility();
   updateLeagueContextHighlight();
+  if(sb){
+    await checkAdminSession();
+    sb.auth.onAuthStateChange((_event, session) => {
+      isAdmin = !!(session && session.user && session.user.email === ADMIN_EMAIL);
+      setAdminUI();
+    });
+    subscribeSharedState();
+  } else {
+    setAdminUI();
+  }
   await loadLeague('douche');
   await loadLeague('balla');
   renderLeaguePage('douche');
