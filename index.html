@@ -609,11 +609,8 @@
   <div class="admin-bar" id="admin-bar">
     <span class="admin-status"><span class="admin-dot" id="admin-dot"></span><span id="admin-status-text">Ansluter…</span></span>
     <span id="admin-login-controls">
-      <button class="btn" data-action="admin-send-code">Logga in som admin</button>
-    </span>
-    <span id="admin-code-controls" style="display:none;">
-      <input type="text" inputmode="numeric" maxlength="6" placeholder="Kod från mejl" id="admin-code-input" />
-      <button class="btn" data-action="admin-verify-code">Verifiera</button>
+      <input type="password" placeholder="Admin-lösenord" id="admin-password-input" autocomplete="current-password" />
+      <button class="btn" data-action="admin-login">Logga in som admin</button>
     </span>
     <span id="admin-logout-controls" style="display:none;">
       <button class="btn" data-action="admin-logout">Logga ut</button>
@@ -971,55 +968,39 @@ try{
   }
 }catch(e){ console.error('Supabase init failed', e); }
 
-function setAdminUI(status){
+function setAdminUI(){
   const dot = document.getElementById('admin-dot');
   const text = document.getElementById('admin-status-text');
   const loginC = document.getElementById('admin-login-controls');
-  const codeC = document.getElementById('admin-code-controls');
   const logoutC = document.getElementById('admin-logout-controls');
   if(!dot) return;
   document.body.classList.toggle('is-admin', isAdmin);
-  if(status === 'awaiting-code'){
-    if(text) text.textContent = 'Kod skickad till admin-mejlen';
-    if(loginC) loginC.style.display = 'none';
-    if(codeC) codeC.style.display = '';
-    if(logoutC) logoutC.style.display = 'none';
-  } else if(isAdmin){
-    dot.classList.add('live');
+  dot.classList.add('live');
+  if(isAdmin){
     if(text) text.textContent = 'Inloggad som admin — du kan draft:a';
     if(loginC) loginC.style.display = 'none';
-    if(codeC) codeC.style.display = 'none';
     if(logoutC) logoutC.style.display = '';
   } else {
-    dot.classList.add('live');
     if(text) text.textContent = 'Visningsläge — endast admin kan draft:a';
     if(loginC) loginC.style.display = '';
-    if(codeC) codeC.style.display = 'none';
     if(logoutC) logoutC.style.display = 'none';
   }
 }
 
-async function adminSendCode(){
+async function adminLogin(){
   if(!sb) return;
+  const input = document.getElementById('admin-password-input');
+  const password = input ? input.value : '';
+  if(!password){ return; }
   const text = document.getElementById('admin-status-text');
-  if(text) text.textContent = 'Skickar kod…';
-  const { error } = await sb.auth.signInWithOtp({ email: ADMIN_EMAIL });
-  if(error){ if(text) text.textContent = 'Kunde inte skicka kod: ' + error.message; return; }
-  setAdminUI('awaiting-code');
-}
-
-async function adminVerifyCode(){
-  if(!sb) return;
-  const input = document.getElementById('admin-code-input');
-  const code = input ? input.value.trim() : '';
-  if(!code) return;
-  const { data, error } = await sb.auth.verifyOtp({ email: ADMIN_EMAIL, token: code, type: 'email' });
+  if(text) text.textContent = 'Loggar in…';
+  const { data, error } = await sb.auth.signInWithPassword({ email: ADMIN_EMAIL, password });
   if(error){
-    const text = document.getElementById('admin-status-text');
-    if(text) text.textContent = 'Fel kod, försök igen';
+    if(text) text.textContent = 'Fel lösenord';
     return;
   }
   isAdmin = !!(data && data.user && data.user.email === ADMIN_EMAIL);
+  if(input) input.value = '';
   setAdminUI();
 }
 
@@ -1950,11 +1931,8 @@ function hideSuggestions(){
 // ---- Event delegation ----
 
 document.addEventListener('click', (e) => {
-  const adminSend = e.target.closest('[data-action="admin-send-code"]');
-  if(adminSend){ adminSendCode(); return; }
-
-  const adminVerify = e.target.closest('[data-action="admin-verify-code"]');
-  if(adminVerify){ adminVerifyCode(); return; }
+  const adminLoginBtn = e.target.closest('[data-action="admin-login"]');
+  if(adminLoginBtn){ adminLogin(); return; }
 
   const adminLogoutBtn = e.target.closest('[data-action="admin-logout"]');
   if(adminLogoutBtn){ adminLogout(); return; }
@@ -2040,6 +2018,10 @@ document.addEventListener('click', (e) => {
     document.querySelectorAll(`#page-${cell.dataset.league} td.pick-cell`).forEach(td=> td.classList.remove('current'));
     cell.classList.add('current');
   }
+});
+
+document.addEventListener('keydown', (e) => {
+  if(e.key === 'Enter' && e.target && e.target.id === 'admin-password-input'){ adminLogin(); }
 });
 
 document.addEventListener('mousedown', (e) => {
