@@ -1630,7 +1630,12 @@ function tryMatchNamePart(namePart){
 }
 
 function matchPastedNameToPlayer(rawLine){
-  const text = rawLine.replace(/\([^)]*\)/g, ' '); // ta bort lag/position-parenteser typ "(BUF - QB)"
+  let text = rawLine.replace(/\([^)]*\)/g, ' '); // ta bort lag/position-parenteser typ "(BUF - QB)"
+
+  // OCR blandar ofta ihop bokstaven O med siffran 0 (och I med 1) - vanligast i
+  // fornamnsinitialer som "O. Hampton" som annars felaktigt lases som "0. Hampton"
+  // och da inte kanns igen som ett namn alls (namn borjar aldrig med siffra).
+  text = text.replace(/\b0\b(?=\.?\s)/g, 'O').replace(/\b1\b(?=\.?\s)/g, 'I');
 
   const candidates = [];
 
