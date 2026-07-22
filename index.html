@@ -415,8 +415,8 @@
   .round-dir{font-family:'IBM Plex Mono',monospace; font-size:10px; color:var(--chalk-dim); display:block; margin-top:2px;}
 
   td.pick-cell{padding:6px; min-width:150px; vertical-align:top; background:var(--bg);}
-  tbody tr:nth-child(even) td.pick-cell{background:#031517;}
-  td.pick-cell.current{outline:2px solid var(--silver); outline-offset:-2px;}
+  tbody tr:nth-child(even) td.pick-cell{background: color-mix(in srgb, var(--bg) 90%, var(--chalk) 10%);}
+  td.pick-cell.current{outline:2px solid var(--silver); outline-offset:-2px; background: color-mix(in srgb, var(--silver) 12%, var(--bg) 88%);}
   .cell-inner{background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:6px 7px 7px;}
   .cell-top{display:flex; justify-content:space-between; align-items:baseline; margin-bottom:5px;}
   .team-name{
