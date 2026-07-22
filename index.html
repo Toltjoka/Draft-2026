@@ -1600,6 +1600,42 @@ function sleeperTeamName(usersById, ownerId, fallback){
   return (u.metadata && u.metadata.team_name) || u.display_name || fallback;
 }
 
+// Jamfor varje startplats mot waiver wire - flaggar om nagon ledig spelare
+// har hogre projektion an den som star just nu, sa man kan plocka upp & starta direkt.
+function computeWaiverSuggestions(key){
+  const hub = sleeperHub[key];
+  if(!hub || !hub.waiverPlayers || !hub.waiverPlayers.length) return [];
+  const data = state[key];
+  if(!data.rosterSlots) return [];
+  const roster = getWeeklyRoster(key);
+  const { template } = buildWeeklyLineup(data.rosterSlots, roster, data.manualStarters, data.manualBench);
+
+  // Uteslut waiver-spelare som redan tagits upp till laget (t.ex. via ett tidigare klick)
+  const rosterLabelKeys = new Set(roster.map(p => {
+    const parsed = parsePlayerLabel(p.label);
+    return `${parsed.team}|${normPlayerName(parsed.name)}`;
+  }));
+  const availableWaivers = hub.waiverPlayers.filter(w => {
+    const parsed = parsePlayerLabel(w.label);
+    return !rosterLabelKeys.has(`${parsed.team}|${normPlayerName(parsed.name)}`);
+  });
+
+  const suggestions = [];
+  template.forEach((slot, idx) => {
+    const currentPts = slot.player && slot.player.pts !== null && slot.player.pts !== undefined ? slot.player.pts : -Infinity;
+    const best = availableWaivers.find(w => slot.pos.includes(w.pos) && w.pts !== null && w.pts !== undefined && w.pts > currentPts);
+    if(best){
+      suggestions.push({
+        slotIdx: idx, slotLabel: slot.label,
+        currentLabel: slot.player ? slot.player.label : null,
+        currentPts: slot.player ? slot.player.pts : null,
+        waiverLabel: best.label, waiverPts: best.pts
+      });
+    }
+  });
+  return suggestions;
+}
+
 async function loadSleeperLeagueHub(key){
   if(!requireAdmin()) return;
   const data = state[key];
@@ -2082,6 +2118,28 @@ function renderWeeklyPage(){
         <div class="myteam-league-name">${cfg.name}</div>
         <h2 class="myteam-team-name">${escapeHtml(teamName)}</h2>
         ${isManual ? '<p class="desc" style="margin-top:-4px; opacity:.7;">Laget avviker nu från draftresultatet.</p>' : ''}
+
+        ${(() => {
+          const suggestions = computeWaiverSuggestions(key);
+          if(!suggestions.length) return '';
+          return `
+            <div class="lineup-slot" style="margin-bottom:14px; border-color:var(--silver);">
+              <div class="lineup-slot-label">💡 WAIVER-TIPS — BÄTTRE PROJEKTION ÄN NUVARANDE START</div>
+              ${suggestions.map(s => `
+                <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; margin-top:10px; flex-wrap:wrap;">
+                  <div style="flex:1; min-width:0;">
+                    <div class="lineup-slot-sub">${escapeHtml(s.slotLabel)}</div>
+                    <div class="lineup-slot-player" style="font-size:14px;">
+                      ${escapeHtml(s.waiverLabel)} <span style="color:var(--silver);">${s.waiverPts.toFixed(1)}p</span>
+                      <span style="opacity:.6; font-weight:400;"> slår ${s.currentLabel ? escapeHtml(s.currentLabel) + ' (' + (s.currentPts!==null?s.currentPts.toFixed(1):'0.0') + 'p)' : 'tom plats'}</span>
+                    </div>
+                  </div>
+                  <button class="btn" data-action="add-weekly-player" data-league="${key}" data-slot="${s.slotIdx}" data-label="${escapeAttr(s.waiverLabel)}">➕ Ta upp & starta</button>
+                </div>
+              `).join('')}
+            </div>
+          `;
+        })()}
 
         <div class="rounds-control" style="margin-bottom:8px;">
           <div class="lineup-slot-label" style="margin:0;">STARTERS · totalt ${totalPts.toFixed(1)} p</div>
@@ -3463,6 +3521,13 @@ document.addEventListener('click', (e) => {
   const loadHubBtn = e.target.closest('[data-action="load-sleeper-hub"]');
   if(loadHubBtn){
     loadSleeperLeagueHub(loadHubBtn.dataset.league);
+    return;
+  }
+
+  const addWeeklyPlayerBtn = e.target.closest('[data-action="add-weekly-player"]');
+  if(addWeeklyPlayerBtn){
+    const slotVal = addWeeklyPlayerBtn.dataset.slot;
+    addWeeklyRosterPlayer(addWeeklyPlayerBtn.dataset.league, addWeeklyPlayerBtn.dataset.label, slotVal !== undefined ? parseInt(slotVal, 10) : undefined);
     return;
   }
 
