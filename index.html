@@ -1474,6 +1474,89 @@ function openWeeklySwapMenu(button){
   box.style.display = 'block';
 }
 
+// ---- Sleeper-synk (helt oppet API, ingen nyckel behovs) ----
+const SLEEPER_API = 'https://api.sleeper.app/v1';
+let SLEEPER_PLAYERS_CACHE = null;
+let sleeperFoundLeagues = [];
+
+async function sleeperFetchUserId(username){
+  const res = await fetch(`${SLEEPER_API}/user/${encodeURIComponent(username.trim())}`);
+  if(!res.ok) throw new Error('Hittade ingen Sleeper-användare med det namnet.');
+  const data = await res.json();
+  if(!data || !data.user_id) throw new Error('Hittade ingen Sleeper-användare med det namnet.');
+  return data.user_id;
+}
+
+async function sleeperFetchLeagues(userId){
+  const season = new Date().getMonth() >= 1 ? new Date().getFullYear() : new Date().getFullYear() - 1;
+  const res = await fetch(`${SLEEPER_API}/user/${userId}/leagues/nfl/${season}`);
+  if(!res.ok) throw new Error('Kunde inte hämta ligor från Sleeper.');
+  return await res.json();
+}
+
+async function sleeperFetchPlayersMap(){
+  if(SLEEPER_PLAYERS_CACHE) return SLEEPER_PLAYERS_CACHE;
+  const res = await fetch(`${SLEEPER_API}/players/nfl`);
+  if(!res.ok) throw new Error('Kunde inte hämta spelardatabasen från Sleeper.');
+  SLEEPER_PLAYERS_CACHE = await res.json();
+  return SLEEPER_PLAYERS_CACHE;
+}
+
+function sleeperPlayerToLabel(playersMap, playerId){
+  const p = playersMap[playerId];
+  if(!p) return null;
+  const name = p.full_name || `${p.first_name || ''} ${p.last_name || ''}`.trim();
+  if(!name) return null;
+  let pos = p.position || (p.fantasy_positions && p.fantasy_positions[0]) || '';
+  if(pos === 'DEF') pos = 'DST';
+  const team = p.team || playerId; // lagforsvar har lagkoden som player_id ("DAL" osv)
+  return `${name} (${pos}-${team})`;
+}
+
+async function sleeperFindMyUsersLeagues(username){
+  const statusEl = document.getElementById('sleeper-status');
+  if(statusEl) statusEl.textContent = 'Söker upp Sleeper-konto…';
+  const userId = await sleeperFetchUserId(username);
+  if(statusEl) statusEl.textContent = 'Hämtar dina ligor…';
+  const leagues = await sleeperFetchLeagues(userId);
+  sleeperFoundLeagues = leagues.map(l => ({ league_id: l.league_id, name: l.name, season: l.season }));
+  return { userId, leagues: sleeperFoundLeagues };
+}
+
+async function sleeperSyncRoster(key){
+  if(!requireAdmin()) return;
+  const data = state[key];
+  const statusEl = document.getElementById('sleeper-status');
+  if(!data.sleeperLeagueId || !data.sleeperUserId){
+    if(statusEl) statusEl.textContent = '⚠ Ingen Sleeper-liga kopplad till den här ligan än.';
+    return;
+  }
+  try{
+    if(statusEl) statusEl.textContent = 'Synkar från Sleeper…';
+    const [rostersRes, playersMap] = await Promise.all([
+      fetch(`${SLEEPER_API}/league/${data.sleeperLeagueId}/rosters`),
+      sleeperFetchPlayersMap()
+    ]);
+    if(!rostersRes.ok) throw new Error('Kunde inte hämta roster från Sleeper.');
+    const rosters = await rostersRes.json();
+    const myRoster = rosters.find(r => r.owner_id === data.sleeperUserId);
+    if(!myRoster) throw new Error('Hittade inget lag för dig i den ligan.');
+    const playerIds = myRoster.players || [];
+    const labels = playerIds.map(id => sleeperPlayerToLabel(playersMap, id)).filter(Boolean);
+    if(labels.length < 1) throw new Error('Fick inga spelare tillbaka - kolla att rätt liga är vald.');
+
+    data.currentRoster = labels;
+    data.manualStarters = {};
+    data.manualBench = [];
+    queueSave(key);
+    if(statusEl) statusEl.textContent = `✓ Synkade ${labels.length} spelare från Sleeper (${new Date().toLocaleTimeString('sv-SE')})`;
+    renderWeeklyPage();
+  }catch(e){
+    if(statusEl) statusEl.textContent = '⚠ ' + e.message;
+    console.error(e);
+  }
+}
+
 function renderWeeklyPage(){
   const el = document.getElementById('page-WEEKLY');
   if(!el) return;
@@ -1498,8 +1581,40 @@ function renderWeeklyPage(){
     </div>
   `;
 
+  const leagueOptionsHtml = (currentId) => {
+    const opts = ['<option value="">— ingen synk —</option>']
+      .concat(sleeperFoundLeagues.map(l => `<option value="${escapeAttr(l.league_id)}" ${l.league_id === currentId ? 'selected' : ''}>${escapeHtml(l.name)} (${escapeHtml(l.season)})</option>`));
+    return opts.join('');
+  };
+
+  const sleeperCard = `
+    <div class="card">
+      <h2>🔗 Sleeper-synk</h2>
+      <p class="desc">Koppla dina riktiga Sleeper-ligor så kan du synka in ditt roster med en knapp istället för att lägga till spelare för hand. Helt öppet API, ingen nyckel behövs.</p>
+      <div class="rounds-control" style="margin-bottom:10px;">
+        Sleeper-användarnamn:
+        <input type="text" id="sleeper-username-input" placeholder="t.ex. Toltjoka" value="Toltjoka" style="max-width:200px;" />
+        <button class="btn" data-action="sleeper-find-leagues">Hämta mina ligor</button>
+      </div>
+      ${sleeperFoundLeagues.length ? `
+        <div class="rounds-control" style="margin-bottom:8px;">
+          Douchebag motsvarar:
+          <select id="sleeper-map-douche">${leagueOptionsHtml(state.douche.sleeperLeagueId)}</select>
+        </div>
+        <div class="rounds-control" style="margin-bottom:10px;">
+          Ballsvenkan motsvarar:
+          <select id="sleeper-map-balla">${leagueOptionsHtml(state.balla.sleeperLeagueId)}</select>
+        </div>
+        <button class="btn" data-action="sleeper-save-mapping">💾 Spara koppling</button>
+      ` : ''}
+      <div id="sleeper-status" class="save-indicator show" style="margin-top:8px;">
+        ${state.douche.sleeperLeagueId || state.balla.sleeperLeagueId ? 'Koppling sparad. Använd "🔄 Synka från Sleeper" i respektive liga nedan.' : 'Ingen Sleeper-liga kopplad ännu.'}
+      </div>
+    </div>
+  `;
+
   if(!weeklyProjections.players.length){
-    el.innerHTML = uploadCard;
+    el.innerHTML = uploadCard + sleeperCard;
     return;
   }
 
@@ -1588,6 +1703,7 @@ function renderWeeklyPage(){
 
         <div class="rounds-control" style="margin-bottom:8px;">
           <div class="lineup-slot-label" style="margin:0;">STARTERS · totalt ${totalPts.toFixed(1)} p</div>
+          ${data.sleeperLeagueId ? `<button class="btn" data-action="sleeper-sync-roster" data-league="${key}">🔄 Synka från Sleeper</button>` : ''}
           <button class="btn" data-action="optimize-weekly-lineup" data-league="${key}">⚡ Optimera</button>
         </div>
         <div class="lineup-grid">${starterRowsHtml}</div>
@@ -1600,7 +1716,7 @@ function renderWeeklyPage(){
     `;
   }).join('');
 
-  el.innerHTML = uploadCard + teamSections;
+  el.innerHTML = uploadCard + sleeperCard + teamSections;
 }
 
 // ---- CSV-import av ny 4for4 ADP-tabell (admin) ----
@@ -2829,6 +2945,48 @@ document.addEventListener('click', (e) => {
     state[key].manualBench = [];
     queueSave(key);
     renderWeeklyPage();
+    return;
+  }
+
+  const sleeperFindBtn = e.target.closest('[data-action="sleeper-find-leagues"]');
+  if(sleeperFindBtn){
+    if(!requireAdmin()) return;
+    const usernameInput = document.getElementById('sleeper-username-input');
+    const username = usernameInput ? usernameInput.value.trim() : '';
+    if(!username) return;
+    sleeperFindMyUsersLeagues(username)
+      .then(({ userId }) => {
+        state.douche.sleeperUserId = userId;
+        state.balla.sleeperUserId = userId;
+        queueSave('douche'); queueSave('balla');
+        const statusEl = document.getElementById('sleeper-status');
+        if(statusEl) statusEl.textContent = sleeperFoundLeagues.length ? `Hittade ${sleeperFoundLeagues.length} ligor - välj vilken som är vilken nedan.` : 'Inga ligor hittades för det kontot.';
+        renderWeeklyPage();
+      })
+      .catch(err => {
+        const statusEl = document.getElementById('sleeper-status');
+        if(statusEl) statusEl.textContent = '⚠ ' + err.message;
+      });
+    return;
+  }
+
+  const sleeperSaveBtn = e.target.closest('[data-action="sleeper-save-mapping"]');
+  if(sleeperSaveBtn){
+    if(!requireAdmin()) return;
+    const doucheSel = document.getElementById('sleeper-map-douche');
+    const ballaSel = document.getElementById('sleeper-map-balla');
+    state.douche.sleeperLeagueId = doucheSel && doucheSel.value ? doucheSel.value : null;
+    state.balla.sleeperLeagueId = ballaSel && ballaSel.value ? ballaSel.value : null;
+    queueSave('douche'); queueSave('balla');
+    const statusEl = document.getElementById('sleeper-status');
+    if(statusEl) statusEl.textContent = '✓ Koppling sparad.';
+    renderWeeklyPage();
+    return;
+  }
+
+  const sleeperSyncBtn = e.target.closest('[data-action="sleeper-sync-roster"]');
+  if(sleeperSyncBtn){
+    sleeperSyncRoster(sleeperSyncBtn.dataset.league);
     return;
   }
 
