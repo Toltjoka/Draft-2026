@@ -298,6 +298,20 @@
   }
   .lineup-slot.filled{border-color:var(--silver); background:var(--panel-2);}
   .lineup-slot.empty{opacity:.5;}
+  .lineup-slot.pos-qb{border-left:3px solid var(--pos-qb); background:color-mix(in srgb, var(--pos-qb) 8%, var(--bg));}
+  .lineup-slot.pos-qb.filled{background:color-mix(in srgb, var(--pos-qb) 14%, var(--panel-2));}
+  .lineup-slot.pos-rb{border-left:3px solid var(--pos-rb); background:color-mix(in srgb, var(--pos-rb) 8%, var(--bg));}
+  .lineup-slot.pos-rb.filled{background:color-mix(in srgb, var(--pos-rb) 14%, var(--panel-2));}
+  .lineup-slot.pos-wr{border-left:3px solid var(--pos-wr); background:color-mix(in srgb, var(--pos-wr) 8%, var(--bg));}
+  .lineup-slot.pos-wr.filled{background:color-mix(in srgb, var(--pos-wr) 14%, var(--panel-2));}
+  .lineup-slot.pos-te{border-left:3px solid var(--pos-te); background:color-mix(in srgb, var(--pos-te) 8%, var(--bg));}
+  .lineup-slot.pos-te.filled{background:color-mix(in srgb, var(--pos-te) 14%, var(--panel-2));}
+  .lineup-slot.pos-k{border-left:3px solid var(--pos-k); background:color-mix(in srgb, var(--pos-k) 8%, var(--bg));}
+  .lineup-slot.pos-k.filled{background:color-mix(in srgb, var(--pos-k) 14%, var(--panel-2));}
+  .lineup-slot.pos-dst{border-left:3px solid var(--pos-dst); background:color-mix(in srgb, var(--pos-dst) 8%, var(--bg));}
+  .lineup-slot.pos-dst.filled{background:color-mix(in srgb, var(--pos-dst) 14%, var(--panel-2));}
+  .lineup-slot.pos-flex{border-left:3px solid var(--pos-flex); background:color-mix(in srgb, var(--pos-flex) 8%, var(--bg));}
+  .lineup-slot.pos-flex.filled{background:color-mix(in srgb, var(--pos-flex) 14%, var(--panel-2));}
   .lineup-slot-label{font-family:'IBM Plex Mono',monospace; font-size:10.5px; letter-spacing:.05em; text-transform:uppercase; color:var(--chalk-dim); margin-bottom:4px;}
   .lineup-slot-player{font-size:15px; font-weight:600;}
   .swap-btn{
@@ -502,6 +516,7 @@
     --pos-te: #f97316;
     --pos-k:  #eab308;
     --pos-dst:#f43f5e;
+    --pos-flex:#14b8a6;
   }
   .rank-item.pos-qb{border-left-color:var(--pos-qb);}
   .rank-item.pos-rb{border-left-color:var(--pos-rb);}
@@ -2067,11 +2082,12 @@ function renderWeeklyPage(){
 
     const starterRowsHtml = template.map((slot, slotIdx) => {
       const posHint = slot.pos.join('/');
+      const slotPosClass = slot.pos.length === 1 ? 'pos-' + slot.pos[0].toLowerCase() : 'pos-flex';
       if(slot.player){
         const p = slot.player;
         const ptsText = p.pts !== null && p.pts !== undefined ? p.pts.toFixed(1) + ' p' : 'Ingen projektion';
         return `
-          <div class="lineup-slot">
+          <div class="lineup-slot filled ${slotPosClass}">
             <div class="lineup-slot-label">${escapeHtml(slot.label)}</div>
             <div style="display:flex; align-items:center; gap:8px;">
               <div style="flex:1; min-width:0;">
@@ -2085,7 +2101,7 @@ function renderWeeklyPage(){
         `;
       }
       return `
-        <div class="lineup-slot empty">
+        <div class="lineup-slot empty ${slotPosClass}">
           <div class="lineup-slot-label">${escapeHtml(slot.label)}</div>
           <div class="lineup-slot-player">—</div>
           <div class="rounds-control" style="flex-wrap:wrap; margin-top:6px;">
@@ -2100,9 +2116,10 @@ function renderWeeklyPage(){
     const benchRowsHtml = Array.from({ length: benchSize }, (_, i) => {
       const p = bench[i];
       if(p){
+        const benchPosClass = p.parsed && p.parsed.pos ? 'pos-' + p.parsed.pos.toLowerCase() : '';
         const ptsText = p.pts !== null && p.pts !== undefined ? p.pts.toFixed(1) + ' p' : 'Ingen projektion';
         return `
-          <div class="lineup-slot">
+          <div class="lineup-slot filled ${benchPosClass}">
             <div class="lineup-slot-label">BN</div>
             <div style="display:flex; align-items:center; gap:8px;">
               <div style="flex:1; min-width:0;">
