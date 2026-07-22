@@ -1393,32 +1393,11 @@ function renderWeeklyPage(){
     const teamName = data.slots[data.myTeamIdx] || ('Lag ' + (data.myTeamIdx+1));
     const roster = getWeeklyRoster(key);
     const isManual = !!(data.currentRoster && Array.isArray(data.currentRoster));
-    const { template, bench } = buildWeeklyLineup(data.rosterSlots, roster);
+    const { template } = buildWeeklyLineup(data.rosterSlots, roster);
 
-    const starterRows = template.map(slot => {
-      if(!slot.player){
-        return `
-          <div class="lineup-slot empty">
-            <div class="lineup-slot-label">${escapeHtml(slot.label)}</div>
-            <div class="lineup-slot-player">—</div>
-          </div>
-        `;
-      }
-      const p = slot.player;
-      const ptsText = p.pts !== null && p.pts !== undefined ? p.pts.toFixed(1) + ' p' : 'Ingen projektion';
-      return `
-        <div class="lineup-slot">
-          <div class="lineup-slot-label">${escapeHtml(slot.label)}</div>
-          <div class="lineup-slot-player">${escapeHtml(p.label)}</div>
-          <div class="lineup-slot-sub">${ptsText}</div>
-        </div>
-      `;
-    }).join('');
-
-    const benchHtml = bench.length ? bench.map(p => {
-      const ptsText = p.pts !== null && p.pts !== undefined ? p.pts.toFixed(1) + ' p' : '–';
-      return `<span class="bench-chip">${escapeHtml(p.label)} <span style="opacity:.6;">(${ptsText})</span></span>`;
-    }).join('') : '<span class="no-identity">Ingen på bänken.</span>';
+    // Vilka etiketter är satta som startande just nu (kan vara i en specifik slot ELLER i FLEX)
+    const starterLabels = new Map();
+    template.forEach(slot => { if(slot.player) starterLabels.set(slot.player.label, slot.label); });
 
     const POS_GROUPS = [
       { pos: 'QB', label: 'QB' },
@@ -1435,41 +1414,50 @@ function renderWeeklyPage(){
       const pp = parsePlayerLabel(p.label).pos;
       if(grouped[pp]) grouped[pp].push(p); else grouped['OVRIGT'].push(p);
     });
+    Object.keys(grouped).forEach(pos => {
+      grouped[pos].sort((a,b) => (findWeeklyPts(b.label) ?? -1) - (findWeeklyPts(a.label) ?? -1));
+    });
 
-    const posGroupsHtml = POS_GROUPS.map(g => {
-      const players = grouped[g.pos];
-      const chips = players.length ? players.map(p => {
+    function renderPosGroup(posKey, label){
+      const players = grouped[posKey];
+      const rows = players.length ? players.map(p => {
         const pts = findWeeklyPts(p.label);
-        const ptsText = pts !== null && pts !== undefined ? ` (${pts.toFixed(1)}p)` : '';
+        const ptsText = pts !== null && pts !== undefined ? pts.toFixed(1) + ' p' : 'Ingen projektion';
+        const startSlotLabel = starterLabels.get(p.label);
+        const badge = startSlotLabel ? `<span class="me-tag" style="margin-left:6px;">STARTAR (${escapeHtml(startSlotLabel)})</span>` : '<span style="opacity:.5; margin-left:6px; font-size:10px;">bänk</span>';
         return `
-          <span class="bench-chip">
-            ${escapeHtml(p.label)}${ptsText}
-            <button class="btn" style="padding:2px 8px; font-size:10px; margin-left:6px;" data-action="remove-weekly-player" data-league="${key}" data-label="${escapeAttr(p.label)}">✕</button>
-          </span>
+          <div class="lineup-slot" style="margin-bottom:6px;">
+            <div class="lineup-slot-player">${escapeHtml(p.label)} ${badge}</div>
+            <div class="lineup-slot-sub">${ptsText}</div>
+            <button class="btn" style="padding:2px 8px; font-size:10px; margin-top:4px;" data-action="remove-weekly-player" data-league="${key}" data-label="${escapeAttr(p.label)}">✕ Ta bort</button>
+          </div>
         `;
-      }).join('') : '<span class="no-identity">Inga.</span>';
+      }).join('') : `<div class="no-identity" style="margin-bottom:6px;">Ingen ${label} i laget.</div>`;
+
       return `
-        <div style="margin-bottom:10px;">
-          <div class="lineup-slot-label" style="margin-bottom:6px;">${g.label}</div>
-          <div class="bench-list" style="margin-bottom:6px;">${chips}</div>
+        <div style="margin-bottom:16px;">
+          <div class="lineup-slot-label" style="margin-bottom:6px;">${label}</div>
+          ${rows}
           <div class="rounds-control" style="flex-wrap:wrap;">
-            <input type="text" list="weekly-datalist-${g.pos}" id="weekly-add-input-${key}-${g.pos}" placeholder="Lägg till ${g.label}…" style="min-width:200px;" />
-            <button class="btn" data-action="add-weekly-player" data-league="${key}" data-pos="${g.pos}">+ Lägg till</button>
+            <input type="text" list="weekly-datalist-${posKey}" id="weekly-add-input-${key}-${posKey}" placeholder="Lägg till ${label}…" style="min-width:200px;" />
+            <button class="btn" data-action="add-weekly-player" data-league="${key}" data-pos="${posKey}">+ Lägg till</button>
           </div>
         </div>
       `;
-    }).join('');
+    }
+
+    const posGroupsHtml = POS_GROUPS.map(g => renderPosGroup(g.pos, g.label)).join('');
 
     const ovrigtPlayers = grouped['OVRIGT'];
     const ovrigtHtml = ovrigtPlayers.length ? `
-      <div style="margin-bottom:10px;">
+      <div style="margin-bottom:16px;">
         <div class="lineup-slot-label" style="margin-bottom:6px;">Övrigt / okänd position</div>
-        <div class="bench-list">${ovrigtPlayers.map(p => `
-          <span class="bench-chip">
-            ${escapeHtml(p.label)}
-            <button class="btn" style="padding:2px 8px; font-size:10px; margin-left:6px;" data-action="remove-weekly-player" data-league="${key}" data-label="${escapeAttr(p.label)}">✕</button>
-          </span>
-        `).join('')}</div>
+        ${ovrigtPlayers.map(p => `
+          <div class="lineup-slot" style="margin-bottom:6px;">
+            <div class="lineup-slot-player">${escapeHtml(p.label)}</div>
+            <button class="btn" style="padding:2px 8px; font-size:10px; margin-top:4px;" data-action="remove-weekly-player" data-league="${key}" data-label="${escapeAttr(p.label)}">✕ Ta bort</button>
+          </div>
+        `).join('')}
       </div>
     ` : '';
 
@@ -1477,13 +1465,7 @@ function renderWeeklyPage(){
       <div class="myteam-hero">
         <div class="myteam-league-name">${cfg.name}</div>
         <h2 class="myteam-team-name">${escapeHtml(teamName)}</h2>
-        <div class="lineup-grid">${starterRows}</div>
-        <div class="lineup-slot-label" style="margin:14px 0 8px;">Bänk</div>
-        <div class="bench-list">${benchHtml}</div>
-
-        <div class="lineup-slot-label" style="margin:18px 0 8px;">
-          Redigera lag manuellt (add/drop)${isManual ? ' <span style="opacity:.6;">— avviker från draften</span>' : ''}
-        </div>
+        <p class="desc" style="margin-top:-4px;">Alla spelare i laget listas per position nedan — de som är markerade "STARTAR" fyller en startplats, resten räknas som bänk. Lägg till eller ta bort direkt under respektive position.${isManual ? ' <span style="opacity:.7;">Laget avviker nu från draftresultatet.</span>' : ''}</p>
         ${posGroupsHtml}
         ${ovrigtHtml}
         ${isManual ? `<button class="btn" data-action="reset-weekly-roster" data-league="${key}">↺ Återställ till draft</button>` : ''}
