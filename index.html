@@ -1559,6 +1559,127 @@ async function sleeperSyncRoster(key){
   }
 }
 
+// ---- Sleeper liga-lage: stallning, motstand, waiver wire ----
+let sleeperHub = {}; // { [key]: { week, standings, matchup, waiverPos } }
+let waiverSearch = {};
+let waiverPosFilter = {};
+
+async function sleeperFetchState(){
+  const res = await fetch(`${SLEEPER_API}/state/nfl`);
+  if(!res.ok) throw new Error('Kunde inte hämta NFL-veckan från Sleeper.');
+  return await res.json();
+}
+
+async function sleeperFetchUsers(leagueId){
+  const res = await fetch(`${SLEEPER_API}/league/${leagueId}/users`);
+  if(!res.ok) throw new Error('Kunde inte hämta lagen i ligan.');
+  return await res.json();
+}
+
+async function sleeperFetchRosters(leagueId){
+  const res = await fetch(`${SLEEPER_API}/league/${leagueId}/rosters`);
+  if(!res.ok) throw new Error('Kunde inte hämta rosters.');
+  return await res.json();
+}
+
+async function sleeperFetchMatchups(leagueId, week){
+  const res = await fetch(`${SLEEPER_API}/league/${leagueId}/matchups/${week}`);
+  if(!res.ok) throw new Error('Kunde inte hämta veckans matcher.');
+  return await res.json();
+}
+
+function sleeperTeamName(usersById, ownerId, fallback){
+  const u = usersById[ownerId];
+  if(!u) return fallback;
+  return (u.metadata && u.metadata.team_name) || u.display_name || fallback;
+}
+
+async function loadSleeperLeagueHub(key){
+  if(!requireAdmin()) return;
+  const data = state[key];
+  const statusEl = document.getElementById('sleeper-hub-status-' + key);
+  if(!data.sleeperLeagueId || !data.sleeperUserId){
+    if(statusEl) statusEl.textContent = '⚠ Ingen Sleeper-liga kopplad ännu.';
+    return;
+  }
+  if(statusEl) statusEl.textContent = 'Hämtar liga-info…';
+  try{
+    const [nflState, rosters, users, playersMap] = await Promise.all([
+      sleeperFetchState(),
+      sleeperFetchRosters(data.sleeperLeagueId),
+      sleeperFetchUsers(data.sleeperLeagueId),
+      sleeperFetchPlayersMap()
+    ]);
+    const week = nflState.week || 1;
+    const matchups = await sleeperFetchMatchups(data.sleeperLeagueId, week);
+
+    const usersById = {};
+    users.forEach(u => { usersById[u.user_id] = u; });
+
+    const myRoster = rosters.find(r => r.owner_id === data.sleeperUserId);
+
+    // Stallning: sorterad efter vinster, sen poang
+    const standings = rosters.map(r => {
+      const s = r.settings || {};
+      return {
+        teamName: sleeperTeamName(usersById, r.owner_id, 'Lag ' + r.roster_id),
+        wins: s.wins || 0, losses: s.losses || 0, ties: s.ties || 0,
+        fpts: (s.fpts || 0) + (s.fpts_decimal || 0) / 100,
+        isMe: myRoster && r.roster_id === myRoster.roster_id
+      };
+    }).sort((a,b) => (b.wins - a.wins) || (b.fpts - a.fpts));
+
+    // Denna veckans motstand
+    let matchup = null;
+    if(myRoster){
+      const myMatchup = matchups.find(m => m.roster_id === myRoster.roster_id);
+      if(myMatchup){
+        const opponentMatchup = matchups.find(m => m.matchup_id === myMatchup.matchup_id && m.roster_id !== myRoster.roster_id);
+        if(opponentMatchup){
+          const oppRoster = rosters.find(r => r.roster_id === opponentMatchup.roster_id);
+          const oppStarters = (opponentMatchup.starters || []).filter(id => id && id !== '0');
+          const oppPlayers = oppStarters.map(id => {
+            const label = sleeperPlayerToLabel(playersMap, id);
+            return { label, pts: label ? findWeeklyPts(label) : null };
+          });
+          const myTemplate = buildWeeklyLineup(data.rosterSlots, getWeeklyRoster(key), data.manualStarters, data.manualBench);
+          matchup = {
+            oppName: sleeperTeamName(usersById, oppRoster ? oppRoster.owner_id : null, 'Motståndare'),
+            oppPlayers,
+            oppTotal: oppPlayers.reduce((s,p) => s + (p.pts || 0), 0),
+            myTotal: myTemplate.totalPts,
+            week
+          };
+        }
+      }
+    }
+
+    // Waiver wire: alla spelare som INTE ar pa nagon roster i ligan
+    const rosteredIds = new Set();
+    rosters.forEach(r => (r.players || []).forEach(id => rosteredIds.add(id)));
+    const waiverPlayers = Object.keys(playersMap)
+      .filter(id => !rosteredIds.has(id))
+      .map(id => {
+        const p = playersMap[id];
+        if(!p || !p.active) return null;
+        const label = sleeperPlayerToLabel(playersMap, id);
+        if(!label) return null;
+        return { id, label, pos: (p.position === 'DEF' ? 'DST' : p.position), pts: findWeeklyPts(label) };
+      })
+      .filter(Boolean)
+      .filter(p => ['QB','RB','WR','TE','K','DST'].includes(p.pos))
+      .sort((a,b) => (b.pts ?? -1) - (a.pts ?? -1))
+      .slice(0, 150); // begransa - annars blir listan tusentals rader
+
+    sleeperHub[key] = { week, standings, matchup, waiverPlayers };
+    if(statusEl) statusEl.textContent = `✓ Uppdaterad (vecka ${week}, ${new Date().toLocaleTimeString('sv-SE')})`;
+    renderWeeklyPage();
+  }catch(e){
+    if(statusEl) statusEl.textContent = '⚠ ' + e.message;
+    console.error(e);
+  }
+}
+
 // Klistra-in-roster: for ligor utan oppet API (t.ex. NFL.com Fantasy).
 // Man kopierar spelarlistan som text fran den andra sidan och klistrar in har,
 // sa forsoker vi matcha varje rad mot var spelardatabas.
@@ -1955,7 +2076,79 @@ Ja'Marr Chase"></textarea>
     `;
   }).join('');
 
-  el.innerHTML = uploadCard + sleeperCard + teamSections;
+  const sleeperHubSections = ['douche','balla'].filter(key => state[key].sleeperLeagueId).map(key => {
+    const cfg = LEAGUES[key];
+    const hub = sleeperHub[key];
+
+    const standingsHtml = hub ? `
+      <table class="adp-compare-table" style="width:100%; margin-bottom:14px;">
+        <thead><tr><th class="adp-th">Lag</th><th class="adp-th">V-F-O</th><th class="adp-th">Poäng</th></tr></thead>
+        <tbody>
+          ${hub.standings.map((s,i) => `
+            <tr style="${s.isMe ? 'font-weight:700; color:var(--silver);' : ''}">
+              <td class="adp-th-name">${i+1}. ${escapeHtml(s.teamName)}</td>
+              <td class="adp-th">${s.wins}-${s.losses}-${s.ties}</td>
+              <td class="adp-th">${s.fpts.toFixed(1)}</td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    ` : '';
+
+    const matchupHtml = hub && hub.matchup ? `
+      <div class="lineup-slot" style="margin-bottom:14px;">
+        <div class="lineup-slot-label">VECKA ${hub.matchup.week} · MOT ${escapeHtml(hub.matchup.oppName).toUpperCase()}</div>
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-top:6px;">
+          <div>
+            <div class="lineup-slot-sub">Ditt lag (optimerat)</div>
+            <div class="lineup-slot-player" style="font-size:20px;">${hub.matchup.myTotal.toFixed(1)} p</div>
+          </div>
+          <div style="font-family:'Bebas Neue',sans-serif; font-size:20px; color:var(--chalk-dim);">VS</div>
+          <div style="text-align:right;">
+            <div class="lineup-slot-sub">${escapeHtml(hub.matchup.oppName)}</div>
+            <div class="lineup-slot-player" style="font-size:20px;">${hub.matchup.oppTotal.toFixed(1)} p</div>
+          </div>
+        </div>
+        <div class="lineup-slot-sub" style="margin-top:8px; text-align:center;">
+          ${hub.matchup.myTotal > hub.matchup.oppTotal ? '🟢 Du leder just nu på papperet' : hub.matchup.myTotal < hub.matchup.oppTotal ? '🔴 Motståndaren leder just nu på papperet' : '⚪ Jämnt läge'}
+        </div>
+      </div>
+    ` : (hub ? '<p class="desc">Ingen motståndare hittad för denna vecka.</p>' : '');
+
+    const waiverPos = waiverPosFilter[key] || 'ALL';
+    const waiverQuery = (waiverSearch[key] || '').toLowerCase();
+    const waiverHtml = hub ? `
+      <div class="lineup-slot-label" style="margin-bottom:6px;">WAIVER WIRE (lediga spelare)</div>
+      <div class="rounds-control" style="flex-wrap:wrap; margin-bottom:8px;">
+        <input type="text" data-action="waiver-search" data-league="${key}" placeholder="Sök spelare…" value="${escapeAttr(waiverSearch[key] || '')}" style="min-width:160px;" />
+        <select data-action="waiver-pos-filter" data-league="${key}">
+          ${['ALL','QB','RB','WR','TE','K','DST'].map(p => `<option value="${p}" ${waiverPos===p?'selected':''}>${p==='ALL'?'Alla pos':p}</option>`).join('')}
+        </select>
+      </div>
+      <div class="bench-list">
+        ${hub.waiverPlayers.filter(p => (waiverPos==='ALL'||p.pos===waiverPos) && (!waiverQuery || p.label.toLowerCase().includes(waiverQuery))).slice(0,40).map(p => `
+          <span class="bench-chip">${escapeHtml(p.label)} <span style="opacity:.6;">${p.pts!==null&&p.pts!==undefined?'('+p.pts.toFixed(1)+'p)':''}</span></span>
+        `).join('') || '<span class="no-identity">Inga träffar.</span>'}
+      </div>
+    ` : '';
+
+    return `
+      <div class="myteam-hero">
+        <div class="myteam-league-name">${cfg.name}</div>
+        <h2 class="myteam-team-name">🏆 Liga-läge (Sleeper)</h2>
+        <button class="btn" data-action="load-sleeper-hub" data-league="${key}">🔄 Hämta/uppdatera liga-info</button>
+        <div id="sleeper-hub-status-${key}" class="save-indicator show" style="margin:8px 0 14px;"></div>
+        ${hub ? `
+          <div class="lineup-slot-label" style="margin-bottom:6px;">STÄLLNING</div>
+          ${standingsHtml}
+          ${matchupHtml}
+          ${waiverHtml}
+        ` : '<p class="desc">Klicka på knappen ovan för att hämta ställning, veckans motstånd och lediga spelare.</p>'}
+      </div>
+    `;
+  }).join('');
+
+  el.innerHTML = uploadCard + sleeperCard + teamSections + sleeperHubSections;
 }
 
 // ---- CSV-import av ny 4for4 ADP-tabell (admin) ----
@@ -3229,6 +3422,12 @@ document.addEventListener('click', (e) => {
     return;
   }
 
+  const loadHubBtn = e.target.closest('[data-action="load-sleeper-hub"]');
+  if(loadHubBtn){
+    loadSleeperLeagueHub(loadHubBtn.dataset.league);
+    return;
+  }
+
   const togglePasteBtn = e.target.closest('[data-action="toggle-paste-roster"]');
   if(togglePasteBtn){
     const key = togglePasteBtn.dataset.league;
@@ -3439,6 +3638,12 @@ document.addEventListener('input', (e) => {
 });
 
 document.addEventListener('change', (e) => {
+  const waiverInput = e.target.closest('[data-action="waiver-search"]');
+  if(waiverInput){ waiverSearch[waiverInput.dataset.league] = waiverInput.value; renderWeeklyPage(); return; }
+
+  const waiverPosSelect = e.target.closest('[data-action="waiver-pos-filter"]');
+  if(waiverPosSelect){ waiverPosFilter[waiverPosSelect.dataset.league] = waiverPosSelect.value; renderWeeklyPage(); return; }
+
   const posFilterCheck = e.target.closest('[data-action="toggle-all-pos"]');
   if(posFilterCheck){
     const pos = posFilterCheck.dataset.pos;
