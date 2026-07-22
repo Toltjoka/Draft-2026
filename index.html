@@ -300,6 +300,13 @@
   .lineup-slot.empty{opacity:.5;}
   .lineup-slot-label{font-family:'IBM Plex Mono',monospace; font-size:10.5px; letter-spacing:.05em; text-transform:uppercase; color:var(--chalk-dim); margin-bottom:4px;}
   .lineup-slot-player{font-size:15px; font-weight:600;}
+  .swap-btn{
+    width:38px; height:38px; border-radius:50%; border:2px solid var(--silver); background:var(--panel-2);
+    display:flex; align-items:center; justify-content:center; font-size:19px; line-height:1; cursor:pointer;
+    flex-shrink:0; padding:0;
+  }
+  .swap-btn:hover{background:var(--silver); }
+  .swap-btn:active{transform:scale(0.94);}
   .lineup-slot-player.empty-slot{font-weight:400; font-style:italic; font-size:13px; color:var(--chalk-dim);}
   .lineup-slot-team{font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--chalk-dim); font-weight:400;}
   .lineup-bench-title{font-family:'IBM Plex Mono',monospace; font-size:12px; letter-spacing:.04em; text-transform:uppercase; color:var(--chalk-dim); margin-bottom:8px;}
@@ -1502,12 +1509,14 @@ function renderWeeklyPage(){
         return `
           <div class="lineup-slot">
             <div class="lineup-slot-label">${escapeHtml(slot.label)}</div>
-            <div class="lineup-slot-player">${escapeHtml(p.label)}</div>
-            <div class="lineup-slot-sub">${ptsText}</div>
-            <div style="display:flex; gap:6px; margin-top:4px;">
-              <button class="btn" style="padding:2px 8px; font-size:10px;" data-action="remove-weekly-player" data-league="${key}" data-label="${escapeAttr(p.label)}">✕ Ta bort</button>
-              <button class="btn" style="padding:2px 10px; font-size:13px; margin-left:auto;" data-action="open-weekly-swap-menu" data-league="${key}" data-label="${escapeAttr(p.label)}" title="Byt">🔁</button>
+            <div style="display:flex; align-items:center; gap:8px;">
+              <div style="flex:1; min-width:0;">
+                <div class="lineup-slot-player">${escapeHtml(p.label)}</div>
+                <div class="lineup-slot-sub">${ptsText}</div>
+              </div>
+              <button class="swap-btn" data-action="open-weekly-swap-menu" data-league="${key}" data-label="${escapeAttr(p.label)}" title="Byt spelare">🔄</button>
             </div>
+            <button class="btn" style="padding:2px 8px; font-size:10px; margin-top:6px;" data-action="remove-weekly-player" data-league="${key}" data-label="${escapeAttr(p.label)}">✕ Ta bort</button>
           </div>
         `;
       }
@@ -1522,20 +1531,36 @@ function renderWeeklyPage(){
       `;
     }).join('');
 
-    const benchRowsHtml = bench.length ? bench.map(p => {
-      const ptsText = p.pts !== null && p.pts !== undefined ? p.pts.toFixed(1) + ' p' : 'Ingen projektion';
+    // Fasta bankplatser - lika manga som (rundor - startplatser), tomma platser ser ut som tomma startplatser
+    const benchSize = Math.max(bench.length, (data.rounds || data.rosterSlots.length) - data.rosterSlots.length);
+    const benchRowsHtml = Array.from({ length: benchSize }, (_, i) => {
+      const p = bench[i];
+      if(p){
+        const ptsText = p.pts !== null && p.pts !== undefined ? p.pts.toFixed(1) + ' p' : 'Ingen projektion';
+        return `
+          <div class="lineup-slot">
+            <div class="lineup-slot-label">BN</div>
+            <div style="display:flex; align-items:center; gap:8px;">
+              <div style="flex:1; min-width:0;">
+                <div class="lineup-slot-player">${escapeHtml(p.label)}</div>
+                <div class="lineup-slot-sub">${ptsText}</div>
+              </div>
+              <button class="swap-btn" data-action="open-weekly-swap-menu" data-league="${key}" data-label="${escapeAttr(p.label)}" title="Byt spelare">🔄</button>
+            </div>
+            <button class="btn" style="padding:2px 8px; font-size:10px; margin-top:6px;" data-action="remove-weekly-player" data-league="${key}" data-label="${escapeAttr(p.label)}">✕ Ta bort</button>
+          </div>
+        `;
+      }
       return `
-        <div class="lineup-slot">
+        <div class="lineup-slot empty">
           <div class="lineup-slot-label">BN</div>
-          <div class="lineup-slot-player">${escapeHtml(p.label)}</div>
-          <div class="lineup-slot-sub">${ptsText}</div>
-          <div style="display:flex; gap:6px; margin-top:4px;">
-            <button class="btn" style="padding:2px 8px; font-size:10px;" data-action="remove-weekly-player" data-league="${key}" data-label="${escapeAttr(p.label)}">✕ Ta bort</button>
-            <button class="btn" style="padding:2px 10px; font-size:13px; margin-left:auto;" data-action="open-weekly-swap-menu" data-league="${key}" data-label="${escapeAttr(p.label)}" title="Byt">🔁</button>
+          <div class="lineup-slot-player">—</div>
+          <div class="rounds-control" style="flex-wrap:wrap; margin-top:6px;">
+            <input type="text" class="player-search" autocomplete="off" data-action="weekly-player-search" data-league="${key}" data-bench="1" id="weekly-bench-input-${key}-${i}" placeholder="Sök spelare…" style="min-width:180px;" />
           </div>
         </div>
       `;
-    }).join('') : '<div class="no-identity">Ingen på bänken.</div>';
+    }).join('');
 
     return `
       <div class="myteam-hero">
@@ -1551,9 +1576,6 @@ function renderWeeklyPage(){
 
         <div class="lineup-slot-label" style="margin:18px 0 8px;">BÄNK</div>
         <div class="lineup-grid">${benchRowsHtml}</div>
-        <div class="rounds-control" style="flex-wrap:wrap; margin-top:10px;">
-          <input type="text" class="player-search" autocomplete="off" data-action="weekly-player-search" data-league="${key}" data-bench="1" id="weekly-bench-input-${key}" placeholder="Sök spelare att lägga på bänken…" style="min-width:220px;" />
-        </div>
 
         ${isManual ? `<button class="btn" style="margin-top:12px;" data-action="reset-weekly-roster" data-league="${key}">↺ Återställ till draft</button>` : ''}
       </div>
