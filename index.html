@@ -371,7 +371,7 @@
   .clock-meta{font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--chalk-dim);}
   .clock-done{font-family:'Bebas Neue',sans-serif; font-size:22px; color:var(--silver);}
 
-  .table-scroll{overflow-x:auto; border-radius:12px; border:1px solid var(--line);}
+  .table-scroll{overflow-x:auto; border-radius:12px; border:1px solid var(--line); box-shadow: 0 10px 28px var(--shadow), 0 2px 8px var(--shadow); margin:0 18px 20px;}
   table.board{border-collapse:separate; border-spacing:0; width:100%; min-width:max-content;}
   table.board th, table.board td{border-bottom:1px solid var(--line); border-right:1px solid var(--line);}
   table.board th:last-child, table.board td:last-child{border-right:none;}
@@ -1483,7 +1483,7 @@ function renderLeaguePage(key){
 
     ${clockHtml}
 
-    <div class="card" style="padding:0; overflow:hidden;">
+    <div class="card" style="padding:0;">
       <div class="table-scroll">
         <table class="board">
           <thead><tr>${theadHtml}</tr></thead>
