@@ -319,6 +319,7 @@
   }
   .card h2{font-family:'Bebas Neue',sans-serif; font-size:22px; letter-spacing:.03em; margin:0 0 4px; color:var(--silver);}
   .card p.desc{font-size:12.5px; color:var(--chalk-dim); margin:0 0 14px; line-height:1.5;}
+  .board-card{box-shadow: 0 14px 34px var(--shadow), 0 4px 10px var(--shadow);}
 
   .slots-grid{display:grid; grid-template-columns:repeat(auto-fit, minmax(96px,1fr)); gap:8px;}
   .slot-field label{
@@ -371,7 +372,7 @@
   .clock-meta{font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--chalk-dim);}
   .clock-done{font-family:'Bebas Neue',sans-serif; font-size:22px; color:var(--silver);}
 
-  .table-scroll{overflow-x:auto; border-radius:12px; border:1px solid var(--line); box-shadow: 0 10px 28px var(--shadow), 0 2px 8px var(--shadow); margin:0 18px 20px;}
+  .table-scroll{overflow-x:auto; border-radius:12px; border:1px solid var(--line);}
   table.board{border-collapse:separate; border-spacing:0; width:100%; min-width:max-content;}
   table.board th, table.board td{border-bottom:1px solid var(--line); border-right:1px solid var(--line);}
   table.board th:last-child, table.board td:last-child{border-right:none;}
@@ -417,7 +418,7 @@
   td.pick-cell{padding:6px; min-width:150px; vertical-align:top; background:var(--bg);}
   tbody tr:nth-child(even) td.pick-cell{background: color-mix(in srgb, var(--bg) 90%, var(--chalk) 10%);}
   td.pick-cell.current{outline:2px solid var(--silver); outline-offset:-2px; background: color-mix(in srgb, var(--silver) 12%, var(--bg) 88%);}
-  .cell-inner{background: color-mix(in srgb, var(--panel) 85%, var(--chalk) 15%); border:1px solid var(--line); border-radius:8px; padding:6px 7px 7px; box-shadow: 0 1px 3px var(--shadow);}
+  .cell-inner{background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:6px 7px 7px;}
   .cell-top{display:flex; justify-content:space-between; align-items:baseline; margin-bottom:5px;}
   .team-name{
     font-weight:700; font-size:12.5px; color:var(--silver);
@@ -1483,7 +1484,7 @@ function renderLeaguePage(key){
 
     ${clockHtml}
 
-    <div class="card" style="padding:0;">
+    <div class="card board-card" style="padding:0; overflow:hidden;">
       <div class="table-scroll">
         <table class="board">
           <thead><tr>${theadHtml}</tr></thead>
