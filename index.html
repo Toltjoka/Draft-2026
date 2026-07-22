@@ -1576,32 +1576,30 @@ const NFL_TEAM_NAME_TO_ABBR = {
   'washington commanders':'WAS', 'washington football team':'WAS', 'washington redskins':'WAS'
 };
 
-function matchPastedNameToPlayer(rawLine){
-  let text = rawLine.replace(/\([^)]*\)/g, ' '); // ta bort lag/position-parenteser typ "(BUF - QB)"
+// Bara maskotnamnet - anvands som sista utvag for skrapig OCR-text dar stad+maskot
+// hamnat pa olika stallen (t.ex. "DEF 19a iv Lions Eb 7.00")
+const MASCOT_TO_ABBR = {
+  'cardinals':'ARI', 'falcons':'ATL', 'ravens':'BAL', 'bills':'BUF', 'panthers':'CAR', 'bears':'CHI',
+  'bengals':'CIN', 'browns':'CLE', 'cowboys':'DAL', 'broncos':'DEN', 'lions':'DET', 'packers':'GB',
+  'texans':'HOU', 'colts':'IND', 'jaguars':'JAX', 'chiefs':'KC', 'raiders':'LV', 'chargers':'LAC',
+  'rams':'LAR', 'dolphins':'MIA', 'vikings':'MIN', 'patriots':'NE', 'saints':'NO', 'giants':'NYG',
+  'jets':'NYJ', 'eagles':'PHI', 'steelers':'PIT', '49ers':'SF', 'niners':'SF', 'seahawks':'SEA',
+  'buccaneers':'TB', 'bucs':'TB', 'titans':'TEN', 'commanders':'WAS'
+};
 
-  // NFL.com klistrar ofta ihop positionen direkt efter namnet utan mellanslag,
-  // t.ex. "Joe BurrowQB - CIN" eller "Detroit LionsDEF". Plocka ut namnet fore det.
-  const gluedMatch = text.match(/^(.+?)(QB|RB|WR|TE|K|DEF|DST)\s*(?:-\s*[A-Za-z]{2,4})?/);
-  let namePart = gluedMatch ? gluedMatch[1].trim() : text;
-  const detectedPos = gluedMatch ? gluedMatch[2].toUpperCase() : null;
-
+function tryMatchNamePart(namePart){
   // Forsvar: matcha via stad+maskot -> lagforkortning istallet for namnlikhet
-  // (vi lagrar forsvar som "Detroit D/ST", medan NFL.com/bildigenkanning ofta ger "Detroit Lions")
-  // Kolla alltid, inte bara nar en hopklistrad DEF/DST-tagg hittades, eftersom
-  // t.ex. bildigenkanning ofta ger rena lagnamn utan positionstagg.
-  {
-    const abbr = NFL_TEAM_NAME_TO_ABBR[namePart.toLowerCase().trim()];
-    if(abbr){
-      const dst = PLAYERS.find(p => p.pos === 'DST' && p.team === abbr);
-      if(dst) return dst;
-    }
+  const abbr = NFL_TEAM_NAME_TO_ABBR[namePart.toLowerCase().trim()];
+  if(abbr){
+    const dst = PLAYERS.find(p => p.pos === 'DST' && p.team === abbr);
+    if(dst) return dst;
   }
 
   const cleaned = namePart
     .replace(/[•\-–—|,]+/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
-  if(cleaned.length < 3) return null;
+  if(cleaned.length < 5) return null;
   const normCleaned = normPlayerName(cleaned);
 
   // 1) Forsok exakt/nastan-exakt matchning pa fullstandigt namn
@@ -1618,6 +1616,42 @@ function matchPastedNameToPlayer(rawLine){
   const subMatches = PLAYERS.filter(p => cleaned.toLowerCase().includes((p.full || p.name).toLowerCase()) || (p.full || p.name).toLowerCase().includes(cleaned.toLowerCase()));
   if(subMatches.length === 1) return subMatches[0];
 
+  // 4) Sista utvag for forsvar: leta efter ett maskotnamn nagonstans i den ravariga texten
+  //    (OCR fran skarmdumpar blandar ofta ihop ikoner/siffror med stad+maskot)
+  const words = cleaned.toLowerCase().split(/\s+/);
+  for(const w of words){
+    if(MASCOT_TO_ABBR[w]){
+      const dst = PLAYERS.find(p => p.pos === 'DST' && p.team === MASCOT_TO_ABBR[w]);
+      if(dst) return dst;
+    }
+  }
+
+  return null;
+}
+
+function matchPastedNameToPlayer(rawLine){
+  const text = rawLine.replace(/\([^)]*\)/g, ' '); // ta bort lag/position-parenteser typ "(BUF - QB)"
+
+  const candidates = [];
+
+  // Kandidat A: NFL.com-webbens format "Joe BurrowQB - CIN" (namn fore hopklistrad position)
+  const gluedMatch = text.match(/^(.+?)(QB|RB|WR|TE|K|DEF|DST)\s*(?:-\s*[A-Za-z]{2,4})?/);
+  if(gluedMatch) candidates.push(gluedMatch[1].trim());
+
+  // Kandidat B: appens/OCR:ens format "QB [ikon] Joe Burrow 20.4" (position fore namnet).
+  // Leta efter forsta versal-ord+versal-ord-monstret var som helst i raden, oavsett
+  // vad som star fore eller efter (funkar bade nar position kommer fore och efter namnet).
+  const nameRegex = /\b[A-Z][A-Za-z'.-]*\.?\s+[A-Z][A-Za-z'.-]+(?:\s+(?:Jr\.?|Sr\.?|II|III|IV))?\b/;
+  const nameMatch = text.match(nameRegex);
+  if(nameMatch) candidates.push(nameMatch[0].trim());
+
+  // Kandidat C: hela raden oforandrad, som sista utvag
+  candidates.push(text);
+
+  for(const cand of candidates){
+    const hit = tryMatchNamePart(cand);
+    if(hit) return hit;
+  }
   return null;
 }
 
@@ -1644,6 +1678,79 @@ function importPastedRoster(key){
   pasteRosterStatusMsg[key] = `✓ Hittade ${matchedLabels.length} av ${lines.length} rader.` +
     (unmatched.length ? `<br>Kunde inte matcha: ${unmatched.map(escapeHtml).join(', ')} — lägg till dem manuellt.` : '');
   pasteRosterBoxOpen[key] = true;
+  renderWeeklyPage();
+}
+
+// ---- Skarmdumpsimport via OCR (Tesseract.js) - helt gratis, kors i webblasaren, ingen nyckel ----
+let tesseractLoadPromise = null;
+function loadTesseractScript(){
+  if(window.Tesseract) return Promise.resolve();
+  if(tesseractLoadPromise) return tesseractLoadPromise;
+  tesseractLoadPromise = new Promise((resolve, reject) => {
+    const s = document.createElement('script');
+    s.src = 'https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js';
+    s.onload = resolve;
+    s.onerror = () => reject(new Error('Kunde inte ladda OCR-biblioteket. Kolla internetuppkopplingen.'));
+    document.head.appendChild(s);
+  });
+  return tesseractLoadPromise;
+}
+
+async function extractRosterNamesFromImages(files, onProgress){
+  await loadTesseractScript();
+  const worker = await Tesseract.createWorker('eng');
+  const allLines = [];
+  try{
+    for(let i = 0; i < files.length; i++){
+      if(onProgress) onProgress(i + 1, files.length);
+      const { data: { text } } = await worker.recognize(files[i]);
+      text.split('\n').map(l => l.trim()).filter(Boolean).forEach(l => allLines.push(l));
+    }
+  } finally {
+    await worker.terminate();
+  }
+  return allLines;
+}
+
+async function importRosterFromScreenshots(key){
+  if(!requireAdmin()) return;
+  const input = document.getElementById('roster-screenshot-input-' + key);
+  if(!input || !input.files || !input.files.length) return;
+  const files = Array.from(input.files);
+  pasteRosterBoxOpen[key] = true;
+  pasteRosterStatusMsg[key] = 'Läser text i bild(er) (OCR)… kan ta någon minut första gången.';
+  renderWeeklyPage();
+
+  try{
+    const lines = await extractRosterNamesFromImages(files, (i, n) => {
+      pasteRosterStatusMsg[key] = `Läser bild ${i} av ${n}…`;
+      const statusEl = document.getElementById('paste-roster-status-' + key);
+      if(statusEl) statusEl.innerHTML = pasteRosterStatusMsg[key];
+    });
+
+    const matchedLabels = [];
+    const seenLabels = new Set();
+    lines.forEach(line => {
+      const p = matchPastedNameToPlayer(line);
+      if(p){
+        const label = formatPlayerLabel(p);
+        if(!seenLabels.has(label)){ seenLabels.add(label); matchedLabels.push(label); }
+      }
+    });
+
+    if(matchedLabels.length < 1) throw new Error('Kunde inte läsa av några spelarnamn i bilden. Prova en tydligare skärmdump eller klistra in text istället.');
+
+    const data = state[key];
+    data.currentRoster = matchedLabels;
+    data.manualStarters = {};
+    data.manualBench = [];
+    queueSave(key);
+
+    pasteRosterStatusMsg[key] = `✓ Hittade ${matchedLabels.length} spelare via OCR. Dubbelkolla mot ditt riktiga lag — OCR läser inte alltid 100% rätt, lägg till/ta bort manuellt om något saknas eller är fel.`;
+  }catch(e){
+    pasteRosterStatusMsg[key] = '⚠ ' + e.message;
+    console.error(e);
+  }
   renderWeeklyPage();
 }
 
@@ -1805,6 +1912,10 @@ Josh Allen
 Jahmyr Gibbs
 Ja'Marr Chase"></textarea>
           <button class="btn" style="margin-top:8px;" data-action="import-pasted-roster" data-league="${key}">Importera inklistrad lista</button>
+
+          <p class="desc" style="margin-top:14px;">Eller: ladda upp skärmdump(ar) av ditt roster (går bra med flera bilder om laget inte får plats på en skärm). Läses av lokalt i webbläsaren med OCR (textigenkänning) — inte lika smart som riktig AI-bildläsning, så dubbelkolla resultatet.</p>
+          <button class="btn" data-action="upload-roster-screenshots" data-league="${key}">📸 Ladda upp skärmdump(ar)</button>
+          <input type="file" id="roster-screenshot-input-${key}" accept="image/*" multiple style="display:none;" />
 
           <div id="paste-roster-status-${key}" class="save-indicator show" style="margin-top:8px;">${pasteRosterStatusMsg[key] || ''}</div>
         </div>
@@ -3110,6 +3221,13 @@ document.addEventListener('click', (e) => {
     return;
   }
 
+  const uploadScreenshotBtn = e.target.closest('[data-action="upload-roster-screenshots"]');
+  if(uploadScreenshotBtn){
+    if(!requireAdmin()) return;
+    document.getElementById('roster-screenshot-input-' + uploadScreenshotBtn.dataset.league).click();
+    return;
+  }
+
   const swapMenuBtn = e.target.closest('[data-action="open-weekly-swap-menu"]');
   if(swapMenuBtn){
     if(!requireAdmin()) return;
@@ -3337,6 +3455,11 @@ document.addEventListener('change', (e) => {
   if(e.target.id === 'ranking-csv-input'){ if(e.target.files[0]) importRankingCsv(e.target.files[0]); e.target.value = ''; return; }
   if(e.target.id === 'weekly-file-input'){ if(e.target.files[0]) importWeeklyCsv(e.target.files[0]); e.target.value = ''; return; }
   if(e.target.id === 'own-pick-sound-input'){ if(e.target.files[0]) uploadSoundFile(e.target.files[0], 'own'); e.target.value = ''; return; }
+  if(e.target.id && e.target.id.startsWith('roster-screenshot-input-')){
+    const key = e.target.id.replace('roster-screenshot-input-', '');
+    if(e.target.files && e.target.files.length) importRosterFromScreenshots(key);
+    return;
+  }
   if(e.target.id === 'value-pick-sound-input'){ if(e.target.files[0]) uploadSoundFile(e.target.files[0], 'value'); e.target.value = ''; return; }
 });
 
