@@ -1637,6 +1637,10 @@ function matchPastedNameToPlayer(rawLine){
   // och da inte kanns igen som ett namn alls (namn borjar aldrig med siffra).
   text = text.replace(/\b0\b(?=\.?\s)/g, 'O').replace(/\b1\b(?=\.?\s)/g, 'I');
 
+  // OCR klistrar ibland ihop initial+efternamn utan mellanslag, t.ex. "R.Shaheed".
+  // Sara isar dem sa namnmonstret nedan kan hitta bada orden.
+  text = text.replace(/\b([A-Z]\.)([A-Z][a-z])/g, '$1 $2');
+
   const candidates = [];
 
   // Kandidat A: NFL.com-webbens format "Joe BurrowQB - CIN" (namn fore hopklistrad position)
@@ -1657,6 +1661,23 @@ function matchPastedNameToPlayer(rawLine){
     const hit = tryMatchNamePart(cand);
     if(hit) return hit;
   }
+
+  // Sista utvag: OCR tappar ibland fornamnsinitialen helt (t.ex. "© Purdy 36.92" istallet
+  // for "B. Purdy"). Leta efter ett ensamt versalt ord och matcha pa bara efternamnet,
+  // men bara om det ar helt entydigt (exakt en spelare i hela databasen har det efternamnet).
+  const isolatedWordMatches = [...text.matchAll(/\b[A-Z][a-z]{3,}\b/g)];
+  for(const m of isolatedWordMatches){
+    const word = m[0];
+    const wLower = word.toLowerCase();
+    const surnameHits = PLAYERS.filter(p => {
+      const full = (p.full || p.name);
+      const parts = full.split(/\s+/);
+      const surname = parts[parts.length - 1].toLowerCase().replace(/[^a-z]/g, '');
+      return surname === wLower;
+    });
+    if(surnameHits.length === 1) return surnameHits[0];
+  }
+
   return null;
 }
 
