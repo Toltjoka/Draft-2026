@@ -1561,6 +1561,19 @@ async function sleeperSyncRoster(key){
 
 // ---- Sleeper liga-lage: stallning, motstand, waiver wire ----
 let sleeperHub = {}; // { [key]: { week, standings, matchup, waiverPos } }
+let sleeperHubAutoLoadAttempted = {};
+
+function autoLoadSleeperHubs(){
+  if(!isAdmin) return;
+  ['douche','balla'].forEach(key => {
+    const d = state[key];
+    if(d && d.sleeperLeagueId && d.sleeperUserId && !sleeperHub[key] && !sleeperHubAutoLoadAttempted[key]){
+      sleeperHubAutoLoadAttempted[key] = true;
+      loadSleeperLeagueHub(key);
+    }
+  });
+}
+
 let waiverSearch = {};
 let waiverPosFilter = {};
 
@@ -2465,7 +2478,7 @@ function switchPage(page){
   if(page === 'ALLTEAMS') renderAllTeamsPage();
   if(page === 'RULES') renderRulesPage();
   if(page === 'LEGACY2025') renderLegacyPage();
-  if(page === 'WEEKLY') renderWeeklyPage();
+  if(page === 'WEEKLY') { renderWeeklyPage(); autoLoadSleeperHubs(); }
   if(page === 'balla' || page === 'douche') scrollToCurrentPick(page);
 }
 
@@ -3508,7 +3521,9 @@ document.addEventListener('click', (e) => {
     queueSave('douche'); queueSave('balla');
     const statusEl = document.getElementById('sleeper-status');
     if(statusEl) statusEl.textContent = '✓ Koppling sparad.';
+    sleeperHubAutoLoadAttempted = {};
     renderWeeklyPage();
+    autoLoadSleeperHubs();
     return;
   }
 
