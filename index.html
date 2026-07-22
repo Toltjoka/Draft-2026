@@ -2614,6 +2614,7 @@ function renderLeaguePage(key){
         <div style="display:flex; align-items:center; gap:10px;">
           <span class="save-indicator" id="save-${key}">✓ Sparat</span>
           <button class="btn admin-write admin-write-btn" data-action="undo-pick" data-league="${key}" ${(!data.pickHistory || !data.pickHistory.length) ? 'disabled' : ''}>↶ Ångra senaste val</button>
+          ${data.draftStarted ? `<button class="btn admin-write admin-write-btn" data-action="pause-draft" data-league="${key}">⏸ Pausa draften</button>` : ''}
           <button class="btn admin-write admin-write-btn" data-action="reset-league" data-league="${key}">Rensa liga</button>
         </div>
       </div>
@@ -3473,6 +3474,16 @@ document.addEventListener('click', (e) => {
     if(!requireAdmin()) return;
     const key = startDraftBtn.dataset.league;
     state[key].draftStarted = true;
+    queueSave(key);
+    renderLeaguePage(key);
+    return;
+  }
+
+  const pauseDraftBtn = e.target.closest('[data-action="pause-draft"]');
+  if(pauseDraftBtn){
+    if(!requireAdmin()) return;
+    const key = pauseDraftBtn.dataset.league;
+    state[key].draftStarted = false;
     queueSave(key);
     renderLeaguePage(key);
     return;
