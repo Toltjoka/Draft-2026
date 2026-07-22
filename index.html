@@ -1382,21 +1382,71 @@ function buildWeeklyLineup(rosterSlots, roster, manualStarters){
   return { template, bench, totalPts };
 }
 
-function swapWeeklyPlayerIn(key, slotIdx, label){
+// Hittar vilka andra spelare i laget en given spelare kan byta plats med.
+// Om spelaren startar: alla i laget (bänk eller andra startande) som kan spela den slotten.
+// Om spelaren sitter på bänken: de startande spelare vars slot hens position passar in på.
+function getSwapCandidates(key, label){
+  const data = state[key];
+  const roster = getWeeklyRoster(key);
+  const { template } = buildWeeklyLineup(data.rosterSlots, roster, data.manualStarters);
+  const starterSlotIdx = template.findIndex(slot => slot.player && slot.player.label === label);
+
+  if(starterSlotIdx !== -1){
+    const slot = template[starterSlotIdx];
+    const candidates = roster
+      .filter(p => p.label !== label && slot.pos.includes(parsePlayerLabel(p.label).pos))
+      .map(p => {
+        const otherSlotIdx = template.findIndex(s => s.player && s.player.label === p.label);
+        return { label: p.label, pts: findWeeklyPts(p.label), otherSlotIdx: otherSlotIdx !== -1 ? otherSlotIdx : null };
+      });
+    return { mode: 'starter', slotIdx: starterSlotIdx, candidates };
+  }
+
+  const pos = parsePlayerLabel(label).pos;
+  const candidates = template
+    .map((slot, idx) => ({ slot, idx }))
+    .filter(({slot}) => slot.player && slot.pos.includes(pos))
+    .map(({slot, idx}) => ({ label: slot.player.label, pts: slot.player.pts, otherSlotIdx: idx }));
+  return { mode: 'bench', candidates };
+}
+
+function performWeeklySwap(key, label, candidateLabel, candidateSlotIdx){
   if(!requireAdmin()) return;
   const data = state[key];
   if(!data.manualStarters) data.manualStarters = {};
-  data.manualStarters[slotIdx] = label;
+  const { candidates, slotIdx, mode } = getSwapCandidates(key, label);
+
+  if(mode === 'starter'){
+    data.manualStarters[slotIdx] = candidateLabel;
+    if(candidateSlotIdx !== null && candidateSlotIdx !== undefined){
+      data.manualStarters[candidateSlotIdx] = label;
+    }
+  } else {
+    data.manualStarters[candidateSlotIdx] = label;
+  }
   queueSave(key);
+  hideSuggestions();
   renderWeeklyPage();
 }
 
-function isPlayerAlreadyRostered(key, playerFull, playerTeam){
-  const roster = getWeeklyRoster(key);
-  return roster.some(p => {
-    const parsed = parsePlayerLabel(p.label);
-    return parsed.name.toLowerCase() === playerFull.toLowerCase() && parsed.team === playerTeam;
-  });
+function openWeeklySwapMenu(button){
+  const key = button.dataset.league;
+  const label = button.dataset.label;
+  const { candidates } = getSwapCandidates(key, label);
+  const box = document.getElementById('global-suggest');
+
+  box.innerHTML = candidates.length ? candidates.map(c => {
+    const ptsText = c.pts !== null && c.pts !== undefined ? c.pts.toFixed(1) + ' p' : 'Ingen projektion';
+    return `
+      <div class="suggest-row" data-weekly-swap-league="${key}" data-weekly-swap-label="${escapeAttr(label)}" data-weekly-swap-candidate="${escapeAttr(c.label)}" data-weekly-swap-candidate-slot="${c.otherSlotIdx === null ? '' : c.otherSlotIdx}">
+        <span>${escapeHtml(c.label)}</span>
+        <span class="suggest-meta">${ptsText}</span>
+      </div>
+    `;
+  }).join('') : '<div class="suggest-empty">Ingen annan i laget kan spela den positionen.</div>';
+
+  positionSuggestBox(button);
+  box.style.display = 'block';
 }
 
 function renderWeeklyPage(){
@@ -1454,7 +1504,10 @@ function renderWeeklyPage(){
             <div class="lineup-slot-label">${escapeHtml(slot.label)}</div>
             <div class="lineup-slot-player">${escapeHtml(p.label)}</div>
             <div class="lineup-slot-sub">${ptsText}</div>
-            <button class="btn" style="padding:2px 8px; font-size:10px; margin-top:4px;" data-action="remove-weekly-player" data-league="${key}" data-label="${escapeAttr(p.label)}">✕ Ta bort</button>
+            <div style="display:flex; gap:6px; margin-top:4px;">
+              <button class="btn" style="padding:2px 8px; font-size:10px;" data-action="remove-weekly-player" data-league="${key}" data-label="${escapeAttr(p.label)}">✕ Ta bort</button>
+              <button class="btn" style="padding:2px 10px; font-size:13px; margin-left:auto;" data-action="open-weekly-swap-menu" data-league="${key}" data-label="${escapeAttr(p.label)}" title="Byt">🔁</button>
+            </div>
           </div>
         `;
       }
@@ -1469,67 +1522,20 @@ function renderWeeklyPage(){
       `;
     }).join('');
 
-    // Bänken grupperad per egen position (som en egen mini-lista, med byt-in-knappar mot rätt startplatser)
-    const BENCH_POS_GROUPS = [
-      { pos: 'QB', label: 'QB' },
-      { pos: 'RB', label: 'RB' },
-      { pos: 'WR', label: 'WR' },
-      { pos: 'TE', label: 'TE' },
-      { pos: 'K', label: 'K' },
-      { pos: 'DST', label: 'DEF' }
-    ];
-    const benchGrouped = {};
-    BENCH_POS_GROUPS.forEach(g => benchGrouped[g.pos] = []);
-    benchGrouped['OVRIGT'] = [];
-    bench.forEach(p => {
-      const pp = p.parsed.pos;
-      if(benchGrouped[pp]) benchGrouped[pp].push(p); else benchGrouped['OVRIGT'].push(p);
-    });
-
-    function eligibleSlotsFor(pos){
-      return template.map((slot, idx) => ({ slot, idx })).filter(({slot}) => slot.pos.includes(pos));
-    }
-
-    const benchGroupsHtml = BENCH_POS_GROUPS.map(g => {
-      const players = benchGrouped[g.pos];
-      if(!players.length) return '';
-      const rows = players.map(p => {
-        const ptsText = p.pts !== null && p.pts !== undefined ? p.pts.toFixed(1) + ' p' : 'Ingen projektion';
-        const slots = eligibleSlotsFor(g.pos);
-        const swapButtons = slots.map(({slot, idx}) => `
-          <button class="btn" style="padding:2px 8px; font-size:10px; margin-top:4px; margin-right:4px;" data-action="swap-weekly-player-in" data-league="${key}" data-slot="${idx}" data-label="${escapeAttr(p.label)}">🔁 → ${escapeHtml(slot.label)}</button>
-        `).join('');
-        return `
-          <div class="lineup-slot">
-            <div class="lineup-slot-label">${g.label} · BN</div>
-            <div class="lineup-slot-player">${escapeHtml(p.label)}</div>
-            <div class="lineup-slot-sub">${ptsText}</div>
-            <div>${swapButtons}<button class="btn" style="padding:2px 8px; font-size:10px; margin-top:4px;" data-action="remove-weekly-player" data-league="${key}" data-label="${escapeAttr(p.label)}">✕ Ta bort</button></div>
-          </div>
-        `;
-      }).join('');
+    const benchRowsHtml = bench.length ? bench.map(p => {
+      const ptsText = p.pts !== null && p.pts !== undefined ? p.pts.toFixed(1) + ' p' : 'Ingen projektion';
       return `
-        <div style="margin-bottom:12px;">
-          <div class="lineup-slot-label" style="margin-bottom:6px;">${g.label}-bänk</div>
-          <div class="lineup-grid">${rows}</div>
+        <div class="lineup-slot">
+          <div class="lineup-slot-label">BN</div>
+          <div class="lineup-slot-player">${escapeHtml(p.label)}</div>
+          <div class="lineup-slot-sub">${ptsText}</div>
+          <div style="display:flex; gap:6px; margin-top:4px;">
+            <button class="btn" style="padding:2px 8px; font-size:10px;" data-action="remove-weekly-player" data-league="${key}" data-label="${escapeAttr(p.label)}">✕ Ta bort</button>
+            <button class="btn" style="padding:2px 10px; font-size:13px; margin-left:auto;" data-action="open-weekly-swap-menu" data-league="${key}" data-label="${escapeAttr(p.label)}" title="Byt">🔁</button>
+          </div>
         </div>
       `;
-    }).join('');
-
-    const ovrigtBench = benchGrouped['OVRIGT'];
-    const ovrigtBenchHtml = ovrigtBench.length ? `
-      <div style="margin-bottom:12px;">
-        <div class="lineup-slot-label" style="margin-bottom:6px;">Övrigt/okänd position</div>
-        <div class="lineup-grid">${ovrigtBench.map(p => `
-          <div class="lineup-slot">
-            <div class="lineup-slot-player">${escapeHtml(p.label)}</div>
-            <button class="btn" style="padding:2px 8px; font-size:10px; margin-top:4px;" data-action="remove-weekly-player" data-league="${key}" data-label="${escapeAttr(p.label)}">✕ Ta bort</button>
-          </div>
-        `).join('')}</div>
-      </div>
-    ` : '';
-
-    const benchHtml = (benchGroupsHtml + ovrigtBenchHtml).trim() || '<div class="no-identity">Ingen på bänken.</div>';
+    }).join('') : '<div class="no-identity">Ingen på bänken.</div>';
 
     return `
       <div class="myteam-hero">
@@ -1544,7 +1550,7 @@ function renderWeeklyPage(){
         <div class="lineup-grid">${starterRowsHtml}</div>
 
         <div class="lineup-slot-label" style="margin:18px 0 8px;">BÄNK</div>
-        ${benchHtml}
+        <div class="lineup-grid">${benchRowsHtml}</div>
         <div class="rounds-control" style="flex-wrap:wrap; margin-top:10px;">
           <input type="text" class="player-search" autocomplete="off" data-action="weekly-player-search" data-league="${key}" data-bench="1" id="weekly-bench-input-${key}" placeholder="Sök spelare att lägga på bänken…" style="min-width:220px;" />
         </div>
@@ -2783,9 +2789,22 @@ document.addEventListener('click', (e) => {
     return;
   }
 
-  const swapInBtn = e.target.closest('[data-action="swap-weekly-player-in"]');
-  if(swapInBtn){
-    swapWeeklyPlayerIn(swapInBtn.dataset.league, swapInBtn.dataset.slot, swapInBtn.dataset.label);
+  const swapMenuBtn = e.target.closest('[data-action="open-weekly-swap-menu"]');
+  if(swapMenuBtn){
+    if(!requireAdmin()) return;
+    openWeeklySwapMenu(swapMenuBtn);
+    return;
+  }
+
+  const swapCandidateRow = e.target.closest('[data-weekly-swap-league]');
+  if(swapCandidateRow){
+    const slotVal = swapCandidateRow.dataset.weeklySwapCandidateSlot;
+    performWeeklySwap(
+      swapCandidateRow.dataset.weeklySwapLeague,
+      swapCandidateRow.dataset.weeklySwapLabel,
+      swapCandidateRow.dataset.weeklySwapCandidate,
+      slotVal === '' ? null : parseInt(slotVal, 10)
+    );
     return;
   }
 
@@ -2856,6 +2875,10 @@ document.addEventListener('click', (e) => {
   if(cell && e.target.tagName !== 'INPUT'){
     document.querySelectorAll(`#page-${cell.dataset.league} td.pick-cell`).forEach(td=> td.classList.remove('current'));
     cell.classList.add('current');
+  }
+
+  if(!e.target.closest('#global-suggest') && !e.target.closest('[data-action="open-weekly-swap-menu"]') && !e.target.closest('[data-action="player-search"]') && !e.target.closest('[data-action="weekly-player-search"]')){
+    hideSuggestions();
   }
 });
 
