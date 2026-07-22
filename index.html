@@ -442,6 +442,8 @@
     padding:7px 9px; border-radius:6px; cursor:pointer; font-size:12.5px;
   }
   .suggest-row:hover{background:var(--panel-2);}
+  .suggest-row.suggest-freetext{border-top:1px dashed var(--line); margin-top:2px; padding-top:9px; color:var(--silver);}
+  .suggest-row.suggest-freetext:hover{background:var(--black-panel);}
   .suggest-meta{font-family:'IBM Plex Mono',monospace; font-size:10px; color:var(--chalk-dim); white-space:nowrap;}
   .suggest-empty{padding:10px; font-size:12px; color:var(--chalk-dim); text-align:center;}
   .rookie-badge{
@@ -2139,19 +2141,27 @@ function showSuggestions(input){
   const key = input.dataset.league;
   const pickKey = input.dataset.pickKey;
   const box = document.getElementById('global-suggest');
-  const query = input.value.trim().toLowerCase();
+  const rawQuery = input.value.trim();
+  const query = rawQuery.toLowerCase();
   const taken = new Set(Object.values(state[key].picks).filter(Boolean));
 
   let matches = PLAYERS.filter(p => !taken.has(formatPlayerLabel(p)));
   if(query) matches = matches.filter(p => p.name.toLowerCase().includes(query) || p.team.toLowerCase().includes(query));
   matches = matches.slice(0, 8);
 
-  box.innerHTML = matches.length ? matches.map(p => `
+  const freeTextRow = rawQuery.length >= 2 ? `
+    <div class="suggest-row suggest-freetext" data-league="${key}" data-pick-key="${pickKey}" data-freetext-value="${escapeAttr(rawQuery)}">
+      <span>✏️ Lägg till <strong>"${escapeHtml(rawQuery)}"</strong> som fritext</span>
+      <span class="suggest-meta">Finns inte i listan</span>
+    </div>
+  ` : '';
+
+  box.innerHTML = (matches.length ? matches.map(p => `
     <div class="suggest-row ${posClass(p.pos)}" data-league="${key}" data-pick-key="${pickKey}" data-label="${escapeAttr(formatPlayerLabel(p))}">
       <span><span class="pos-badge ${posClass(p.pos)}">${escapeHtml(p.pos)}</span> ${escapeHtml(p.name)}${p.rookie?' <span class="rookie-badge">R</span>':''}</span>
       <span class="suggest-meta">${p.rank} · ${p.team} · ADP ${p.adp}</span>
     </div>
-  `).join('') : `<div class="suggest-empty">Inga träffar</div>`;
+  `).join('') : (rawQuery.length >= 2 ? '' : `<div class="suggest-empty">Inga träffar</div>`)) + freeTextRow;
 
   positionSuggestBox(input);
   box.style.display = 'block';
@@ -2248,7 +2258,8 @@ document.addEventListener('click', (e) => {
 
   const suggestRow = e.target.closest('.suggest-row');
   if(suggestRow){
-    pickPlayer(suggestRow.dataset.league, suggestRow.dataset.pickKey, suggestRow.dataset.label);
+    const label = suggestRow.dataset.freetextValue || suggestRow.dataset.label;
+    pickPlayer(suggestRow.dataset.league, suggestRow.dataset.pickKey, label);
     hideSuggestions();
     return;
   }
@@ -2262,6 +2273,21 @@ document.addEventListener('click', (e) => {
 
 document.addEventListener('keydown', (e) => {
   if(e.key === 'Enter' && e.target && e.target.id === 'admin-password-input'){ adminLogin(); }
+
+  const searchInput = e.target && e.target.closest && e.target.closest('[data-action="player-search"]');
+  if(searchInput && e.key === 'Enter'){
+    e.preventDefault();
+    const box = document.getElementById('global-suggest');
+    const firstMatch = box.querySelector('.suggest-row:not(.suggest-freetext)');
+    const freeTextRow = box.querySelector('.suggest-row.suggest-freetext');
+    if(firstMatch){
+      pickPlayer(firstMatch.dataset.league, firstMatch.dataset.pickKey, firstMatch.dataset.label);
+    } else if(freeTextRow){
+      pickPlayer(freeTextRow.dataset.league, freeTextRow.dataset.pickKey, freeTextRow.dataset.freetextValue);
+    }
+    hideSuggestions();
+    searchInput.blur();
+  }
 });
 
 document.addEventListener('mousedown', (e) => {
