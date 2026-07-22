@@ -1265,6 +1265,49 @@ async function importWeeklyCsv(file){
   }
 }
 
+function getWeeklyRoster(key){
+  const data = state[key];
+  if(data.currentRoster && Array.isArray(data.currentRoster)){
+    return data.currentRoster.map(label => ({ label }));
+  }
+  if(data.myTeamIdx === null || data.myTeamIdx === undefined) return [];
+  return getRosterForSlot(key, data.myTeamIdx).filter(p => p.label);
+}
+
+function materializeWeeklyRoster(key){
+  const data = state[key];
+  if(!data.currentRoster || !Array.isArray(data.currentRoster)){
+    data.currentRoster = getWeeklyRoster(key).map(p => p.label);
+  }
+}
+
+function addWeeklyRosterPlayer(key, label){
+  if(!requireAdmin()) return;
+  if(!label || !label.trim()) return;
+  materializeWeeklyRoster(key);
+  const data = state[key];
+  if(!data.currentRoster.includes(label)) data.currentRoster.push(label);
+  queueSave(key);
+  renderWeeklyPage();
+}
+
+function removeWeeklyRosterPlayer(key, label){
+  if(!requireAdmin()) return;
+  materializeWeeklyRoster(key);
+  const data = state[key];
+  data.currentRoster = data.currentRoster.filter(l => l !== label);
+  queueSave(key);
+  renderWeeklyPage();
+}
+
+function resetWeeklyRosterToDraft(key){
+  if(!requireAdmin()) return;
+  if(!confirm('Återställ ' + LEAGUES[key].name + '-laget i Start of the Week till exakt vad som drafta(t)s? Dina manuella ändringar (add/drop) försvinner.')) return;
+  state[key].currentRoster = null;
+  queueSave(key);
+  renderWeeklyPage();
+}
+
 function buildWeeklyLineup(rosterSlots, roster){
   const picked = roster.filter(p => p.label).map(p => ({ ...p, parsed: parsePlayerLabel(p.label), pts: findWeeklyPts(p.label) }));
   const template = rosterSlots.map(t => ({ ...t, player: null }));
@@ -1322,7 +1365,8 @@ function renderWeeklyPage(){
       `;
     }
     const teamName = data.slots[data.myTeamIdx] || ('Lag ' + (data.myTeamIdx+1));
-    const roster = getRosterForSlot(key, data.myTeamIdx);
+    const roster = getWeeklyRoster(key);
+    const isManual = !!(data.currentRoster && Array.isArray(data.currentRoster));
     const { template, bench } = buildWeeklyLineup(data.rosterSlots, roster);
 
     const starterRows = template.map(slot => {
@@ -1350,6 +1394,13 @@ function renderWeeklyPage(){
       return `<span class="bench-chip">${escapeHtml(p.label)} <span style="opacity:.6;">(${ptsText})</span></span>`;
     }).join('') : '<span class="no-identity">Ingen på bänken.</span>';
 
+    const rosterEditRows = roster.length ? roster.map(p => `
+      <span class="bench-chip">
+        ${escapeHtml(p.label)}
+        <button class="btn" style="padding:2px 8px; font-size:10px; margin-left:6px;" data-action="remove-weekly-player" data-league="${key}" data-label="${escapeAttr(p.label)}">✕</button>
+      </span>
+    `).join('') : '<span class="no-identity">Inga spelare i laget just nu.</span>';
+
     return `
       <div class="myteam-hero">
         <div class="myteam-league-name">${cfg.name}</div>
@@ -1357,6 +1408,16 @@ function renderWeeklyPage(){
         <div class="lineup-grid">${starterRows}</div>
         <div class="lineup-slot-label" style="margin:14px 0 8px;">Bänk</div>
         <div class="bench-list">${benchHtml}</div>
+
+        <div class="lineup-slot-label" style="margin:18px 0 8px;">
+          Redigera lag manuellt (add/drop)${isManual ? ' <span style="opacity:.6;">— avviker från draften</span>' : ''}
+        </div>
+        <div class="bench-list" style="margin-bottom:10px;">${rosterEditRows}</div>
+        <div class="rounds-control" style="flex-wrap:wrap;">
+          <input type="text" list="all-players-datalist" id="weekly-add-input-${key}" placeholder="Sök eller skriv spelarnamn…" style="min-width:220px;" />
+          <button class="btn" data-action="add-weekly-player" data-league="${key}">+ Lägg till</button>
+          ${isManual ? `<button class="btn" data-action="reset-weekly-roster" data-league="${key}">↺ Återställ till draft</button>` : ''}
+        </div>
       </div>
     `;
   }).join('');
@@ -2465,6 +2526,29 @@ document.addEventListener('click', (e) => {
     return;
   }
 
+  const addWeeklyBtn = e.target.closest('[data-action="add-weekly-player"]');
+  if(addWeeklyBtn){
+    const key = addWeeklyBtn.dataset.league;
+    const input = document.getElementById('weekly-add-input-' + key);
+    if(input && input.value.trim()){
+      addWeeklyRosterPlayer(key, input.value.trim());
+      input.value = '';
+    }
+    return;
+  }
+
+  const removeWeeklyBtn = e.target.closest('[data-action="remove-weekly-player"]');
+  if(removeWeeklyBtn){
+    removeWeeklyRosterPlayer(removeWeeklyBtn.dataset.league, removeWeeklyBtn.dataset.label);
+    return;
+  }
+
+  const resetWeeklyBtn = e.target.closest('[data-action="reset-weekly-roster"]');
+  if(resetWeeklyBtn){
+    resetWeeklyRosterToDraft(resetWeeklyBtn.dataset.league);
+    return;
+  }
+
   const closeModalBtn = e.target.closest('[data-action="close-backup-modal"]');
   if(closeModalBtn){ hideBackupModal(); return; }
 
@@ -2519,6 +2603,14 @@ document.addEventListener('keydown', (e) => {
     }
     hideSuggestions();
     searchInput.blur();
+  }
+
+  if(e.key === 'Enter' && e.target && e.target.id && e.target.id.startsWith('weekly-add-input-')){
+    const key = e.target.id.replace('weekly-add-input-', '');
+    if(e.target.value.trim()){
+      addWeeklyRosterPlayer(key, e.target.value.trim());
+      e.target.value = '';
+    }
   }
 });
 
