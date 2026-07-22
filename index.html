@@ -1648,75 +1648,6 @@ function importPastedRoster(key){
 }
 
 // ---- Skarmdumpsimport: las av rosterbilder med bildigenkanning istallet for att klistra in text ----
-function fileToBase64(file){
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(reader.result.split(',')[1]);
-    reader.onerror = reject;
-    reader.readAsDataURL(file);
-  });
-}
-
-async function extractRosterNamesFromImages(files){
-  const imageBlocks = await Promise.all(Array.from(files).map(async file => ({
-    type: 'image',
-    source: { type: 'base64', media_type: file.type || 'image/png', data: await fileToBase64(file) }
-  })));
-
-  const response = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      model: 'claude-sonnet-4-6',
-      max_tokens: 1000,
-      messages: [{
-        role: 'user',
-        content: [
-          ...imageBlocks,
-          { type: 'text', text: 'Det här är en eller flera skärmdumpar av en fantasy football-lags roster (från NFL.com, Sleeper eller liknande). Lista alla spelares fullständiga namn du kan se (både startande och bänk/reserve), en per rad, inget annat - inga positioner, lag, poäng eller rubriker. Svara ENDAST med namnen, ett per rad, ingen annan text.' }
-        ]
-      }]
-    })
-  });
-  if(!response.ok) throw new Error('Kunde inte läsa av bilden(erna) just nu.');
-  const data = await response.json();
-  const textBlocks = (data.content || []).filter(b => b.type === 'text').map(b => b.text);
-  const combined = textBlocks.join('\n');
-  return combined.split('\n').map(l => l.trim()).filter(Boolean);
-}
-
-async function importRosterFromScreenshots(key){
-  if(!requireAdmin()) return;
-  const input = document.getElementById('roster-screenshot-input-' + key);
-  if(!input || !input.files || !input.files.length) return;
-  pasteRosterStatusMsg[key] = 'Läser av skärmdump(ar)…';
-  pasteRosterBoxOpen[key] = true;
-  renderWeeklyPage();
-  try{
-    const names = await extractRosterNamesFromImages(input.files);
-    const matchedLabels = [];
-    const unmatched = [];
-    names.forEach(name => {
-      const p = matchPastedNameToPlayer(name);
-      if(p) matchedLabels.push(formatPlayerLabel(p));
-      else unmatched.push(name);
-    });
-
-    const data = state[key];
-    data.currentRoster = [...new Set(matchedLabels)];
-    data.manualStarters = {};
-    data.manualBench = [];
-    queueSave(key);
-
-    pasteRosterStatusMsg[key] = `✓ Läste av ${names.length} namn från bilden, hittade ${matchedLabels.length} i spelardatabasen.` +
-      (unmatched.length ? `<br>Kunde inte matcha: ${unmatched.map(escapeHtml).join(', ')} — lägg till dem manuellt.` : '');
-  }catch(e){
-    pasteRosterStatusMsg[key] = '⚠ ' + e.message;
-    console.error(e);
-  }
-  renderWeeklyPage();
-}
-
 function renderWeeklyPage(){
   const el = document.getElementById('page-WEEKLY');
   if(!el) return;
@@ -1874,10 +1805,6 @@ Josh Allen
 Jahmyr Gibbs
 Ja'Marr Chase"></textarea>
           <button class="btn" style="margin-top:8px;" data-action="import-pasted-roster" data-league="${key}">Importera inklistrad lista</button>
-
-          <p class="desc" style="margin-top:14px;">Eller: ladda upp skärmdump(ar) av ditt roster (går bra med flera bilder om laget inte får plats på en skärm) — vi läser av namnen automatiskt.</p>
-          <button class="btn" data-action="upload-roster-screenshots" data-league="${key}">📸 Ladda upp skärmdump(ar)</button>
-          <input type="file" id="roster-screenshot-input-${key}" accept="image/*" multiple style="display:none;" />
 
           <div id="paste-roster-status-${key}" class="save-indicator show" style="margin-top:8px;">${pasteRosterStatusMsg[key] || ''}</div>
         </div>
@@ -3183,13 +3110,6 @@ document.addEventListener('click', (e) => {
     return;
   }
 
-  const uploadScreenshotBtn = e.target.closest('[data-action="upload-roster-screenshots"]');
-  if(uploadScreenshotBtn){
-    if(!requireAdmin()) return;
-    document.getElementById('roster-screenshot-input-' + uploadScreenshotBtn.dataset.league).click();
-    return;
-  }
-
   const swapMenuBtn = e.target.closest('[data-action="open-weekly-swap-menu"]');
   if(swapMenuBtn){
     if(!requireAdmin()) return;
@@ -3417,11 +3337,6 @@ document.addEventListener('change', (e) => {
   if(e.target.id === 'ranking-csv-input'){ if(e.target.files[0]) importRankingCsv(e.target.files[0]); e.target.value = ''; return; }
   if(e.target.id === 'weekly-file-input'){ if(e.target.files[0]) importWeeklyCsv(e.target.files[0]); e.target.value = ''; return; }
   if(e.target.id === 'own-pick-sound-input'){ if(e.target.files[0]) uploadSoundFile(e.target.files[0], 'own'); e.target.value = ''; return; }
-  if(e.target.id && e.target.id.startsWith('roster-screenshot-input-')){
-    const key = e.target.id.replace('roster-screenshot-input-', '');
-    if(e.target.files && e.target.files.length) importRosterFromScreenshots(key);
-    return;
-  }
   if(e.target.id === 'value-pick-sound-input'){ if(e.target.files[0]) uploadSoundFile(e.target.files[0], 'value'); e.target.value = ''; return; }
 });
 
