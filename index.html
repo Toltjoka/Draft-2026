@@ -1588,6 +1588,12 @@ async function sleeperFetchMatchups(leagueId, week){
   return await res.json();
 }
 
+async function sleeperFetchLeague(leagueId){
+  const res = await fetch(`${SLEEPER_API}/league/${leagueId}`);
+  if(!res.ok) throw new Error('Kunde inte hämta liginformation.');
+  return await res.json();
+}
+
 function sleeperTeamName(usersById, ownerId, fallback){
   const u = usersById[ownerId];
   if(!u) return fallback;
@@ -1604,34 +1610,61 @@ async function loadSleeperLeagueHub(key){
   }
   if(statusEl) statusEl.textContent = 'Hämtar liga-info…';
   try{
-    const [nflState, rosters, users, playersMap] = await Promise.all([
+    const [nflState, rosters, users, playersMap, league] = await Promise.all([
       sleeperFetchState(),
       sleeperFetchRosters(data.sleeperLeagueId),
       sleeperFetchUsers(data.sleeperLeagueId),
-      sleeperFetchPlayersMap()
+      sleeperFetchPlayersMap(),
+      sleeperFetchLeague(data.sleeperLeagueId)
     ]);
     const week = nflState.week || 1;
-    const matchups = await sleeperFetchMatchups(data.sleeperLeagueId, week);
 
     const usersById = {};
     users.forEach(u => { usersById[u.user_id] = u; });
 
     const myRoster = rosters.find(r => r.owner_id === data.sleeperUserId);
 
-    // Stallning: sorterad efter vinster, sen poang
-    const standings = rosters.map(r => {
+    // Divisionsnamn fran liga-metadata ("division_1", "division_2", ...)
+    const divisionNames = {};
+    if(league && league.metadata){
+      Object.keys(league.metadata).forEach(k => {
+        const m = k.match(/^division_(\d+)$/);
+        if(m) divisionNames[parseInt(m[1],10)] = league.metadata[k];
+      });
+    }
+    const hasDivisions = league && league.settings && league.settings.divisions > 1;
+
+    // Stallning: sorterad per division (om det finns), sen vinster, sen poang
+    const standingsFlat = rosters.map(r => {
       const s = r.settings || {};
       return {
         teamName: sleeperTeamName(usersById, r.owner_id, 'Lag ' + r.roster_id),
         wins: s.wins || 0, losses: s.losses || 0, ties: s.ties || 0,
         fpts: (s.fpts || 0) + (s.fpts_decimal || 0) / 100,
+        division: s.division || 1,
         isMe: myRoster && r.roster_id === myRoster.roster_id
       };
-    }).sort((a,b) => (b.wins - a.wins) || (b.fpts - a.fpts));
+    });
+    let standingsGrouped;
+    if(hasDivisions){
+      const byDiv = {};
+      standingsFlat.forEach(s => { (byDiv[s.division] = byDiv[s.division] || []).push(s); });
+      standingsGrouped = Object.keys(byDiv).sort((a,b)=>a-b).map(divNum => ({
+        name: divisionNames[divNum] || ('Division ' + divNum),
+        teams: byDiv[divNum].sort((a,b) => (b.wins - a.wins) || (b.fpts - a.fpts))
+      }));
+    } else {
+      standingsGrouped = [{ name: null, teams: standingsFlat.sort((a,b) => (b.wins - a.wins) || (b.fpts - a.fpts)) }];
+    }
 
-    // Denna veckans motstand
+    // Denna veckans motstand - bara relevant om ligan faktiskt har draftat och sasongen ar igang
     let matchup = null;
-    if(myRoster){
+    let matchupNote = null;
+    const leagueInSeason = league && (league.status === 'in_season' || league.status === 'complete');
+    if(!leagueInSeason){
+      matchupNote = 'Er Sleeper-liga har inte draftat/startat säsongen än, så det finns ingen matchup att visa (liga-status: ' + (league ? league.status : 'okänd') + ').';
+    } else if(myRoster){
+      const matchups = await sleeperFetchMatchups(data.sleeperLeagueId, week);
       const myMatchup = matchups.find(m => m.roster_id === myRoster.roster_id);
       if(myMatchup){
         const opponentMatchup = matchups.find(m => m.matchup_id === myMatchup.matchup_id && m.roster_id !== myRoster.roster_id);
@@ -1650,7 +1683,11 @@ async function loadSleeperLeagueHub(key){
             myTotal: myTemplate.totalPts,
             week
           };
+        } else {
+          matchupNote = 'Hittade ingen motståndare för vecka ' + week + ' (kanske bye-vecka eller matchningarna är inte satta än).';
         }
+      } else {
+        matchupNote = 'Hittade ingen egen match för vecka ' + week + '.';
       }
     }
 
@@ -1671,7 +1708,7 @@ async function loadSleeperLeagueHub(key){
       .sort((a,b) => (b.pts ?? -1) - (a.pts ?? -1))
       .slice(0, 150); // begransa - annars blir listan tusentals rader
 
-    sleeperHub[key] = { week, standings, matchup, waiverPlayers };
+    sleeperHub[key] = { week, standingsGrouped, matchup, matchupNote, waiverPlayers };
     if(statusEl) statusEl.textContent = `✓ Uppdaterad (vecka ${week}, ${new Date().toLocaleTimeString('sv-SE')})`;
     renderWeeklyPage();
   }catch(e){
@@ -2080,11 +2117,12 @@ Ja'Marr Chase"></textarea>
     const cfg = LEAGUES[key];
     const hub = sleeperHub[key];
 
-    const standingsHtml = hub ? `
+    const standingsHtml = hub ? hub.standingsGrouped.map(group => `
+      ${group.name ? `<div class="lineup-slot-sub" style="margin:8px 0 4px; font-weight:700;">${escapeHtml(group.name)}</div>` : ''}
       <table class="adp-compare-table" style="width:100%; margin-bottom:14px;">
         <thead><tr><th class="adp-th">Lag</th><th class="adp-th">V-F-O</th><th class="adp-th">Poäng</th></tr></thead>
         <tbody>
-          ${hub.standings.map((s,i) => `
+          ${group.teams.map((s,i) => `
             <tr style="${s.isMe ? 'font-weight:700; color:var(--silver);' : ''}">
               <td class="adp-th-name">${i+1}. ${escapeHtml(s.teamName)}</td>
               <td class="adp-th">${s.wins}-${s.losses}-${s.ties}</td>
@@ -2093,7 +2131,7 @@ Ja'Marr Chase"></textarea>
           `).join('')}
         </tbody>
       </table>
-    ` : '';
+    `).join('') : '';
 
     const matchupHtml = hub && hub.matchup ? `
       <div class="lineup-slot" style="margin-bottom:14px;">
@@ -2113,7 +2151,7 @@ Ja'Marr Chase"></textarea>
           ${hub.matchup.myTotal > hub.matchup.oppTotal ? '🟢 Du leder just nu på papperet' : hub.matchup.myTotal < hub.matchup.oppTotal ? '🔴 Motståndaren leder just nu på papperet' : '⚪ Jämnt läge'}
         </div>
       </div>
-    ` : (hub ? '<p class="desc">Ingen motståndare hittad för denna vecka.</p>' : '');
+    ` : (hub && hub.matchupNote ? `<p class="desc">${escapeHtml(hub.matchupNote)}</p>` : '');
 
     const waiverPos = waiverPosFilter[key] || 'ALL';
     const waiverQuery = (waiverSearch[key] || '').toLowerCase();
