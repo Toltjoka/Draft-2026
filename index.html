@@ -1175,6 +1175,8 @@ function subscribeRankingData(){
 
 // ---- Start of the Week: privat veckovis projektion (bara admin) ----
 let weeklyProjections = { weekLabel: null, players: [], uploadedAt: null, uploadedBy: null };
+let pasteRosterStatusMsg = {};
+let pasteRosterBoxOpen = {};
 let WEEKLY_INDEX = null;
 let WEEKLY_FULLNAME_INDEX = null;
 
@@ -1557,6 +1559,60 @@ async function sleeperSyncRoster(key){
   }
 }
 
+// Klistra-in-roster: for ligor utan oppet API (t.ex. NFL.com Fantasy).
+// Man kopierar spelarlistan som text fran den andra sidan och klistrar in har,
+// sa forsoker vi matcha varje rad mot var spelardatabas.
+function matchPastedNameToPlayer(rawLine){
+  const cleaned = rawLine
+    .replace(/\([^)]*\)/g, ' ')          // ta bort lag/position-parenteser typ "(BUF - QB)"
+    .replace(/\b(QB|RB|WR|TE|K|DEF|DST|D\/ST)\b/gi, ' ')
+    .replace(/[•\-–—|,]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if(cleaned.length < 3) return null;
+  const normCleaned = normPlayerName(cleaned);
+
+  // 1) Forsok exakt/nastan-exakt matchning pa fullstandigt namn
+  let best = PLAYERS.find(p => (p.full || p.name).toLowerCase() === cleaned.toLowerCase());
+  if(best) return best;
+
+  // 2) Matchning via forkortad-namn-normalisering (forsta bokstav + efternamn)
+  const candidates = PLAYERS.filter(p => normPlayerName(p.full || p.name) === normCleaned);
+  if(candidates.length === 1) return candidates[0];
+
+  // 3) Substrangsmatchning som sista utvag (bara om unikt)
+  const subMatches = PLAYERS.filter(p => cleaned.toLowerCase().includes((p.full || p.name).toLowerCase()) || (p.full || p.name).toLowerCase().includes(cleaned.toLowerCase()));
+  if(subMatches.length === 1) return subMatches[0];
+
+  return null;
+}
+
+function importPastedRoster(key){
+  if(!requireAdmin()) return;
+  const textarea = document.getElementById('paste-roster-textarea-' + key);
+  if(!textarea || !textarea.value.trim()) return;
+  const lines = textarea.value.split(/\n/).map(l => l.trim()).filter(Boolean);
+
+  const matchedLabels = [];
+  const unmatched = [];
+  lines.forEach(line => {
+    const p = matchPastedNameToPlayer(line);
+    if(p) matchedLabels.push(formatPlayerLabel(p));
+    else unmatched.push(line);
+  });
+
+  const data = state[key];
+  data.currentRoster = [...new Set(matchedLabels)];
+  data.manualStarters = {};
+  data.manualBench = [];
+  queueSave(key);
+
+  pasteRosterStatusMsg[key] = `✓ Hittade ${matchedLabels.length} av ${lines.length} rader.` +
+    (unmatched.length ? `<br>Kunde inte matcha: ${unmatched.map(escapeHtml).join(', ')} — lägg till dem manuellt.` : '');
+  pasteRosterBoxOpen[key] = true;
+  renderWeeklyPage();
+}
+
 function renderWeeklyPage(){
   const el = document.getElementById('page-WEEKLY');
   if(!el) return;
@@ -1704,7 +1760,17 @@ function renderWeeklyPage(){
         <div class="rounds-control" style="margin-bottom:8px;">
           <div class="lineup-slot-label" style="margin:0;">STARTERS · totalt ${totalPts.toFixed(1)} p</div>
           ${data.sleeperLeagueId ? `<button class="btn" data-action="sleeper-sync-roster" data-league="${key}">🔄 Synka från Sleeper</button>` : ''}
+          <button class="btn" data-action="toggle-paste-roster" data-league="${key}">📋 Klistra in roster</button>
           <button class="btn" data-action="optimize-weekly-lineup" data-league="${key}">⚡ Optimera</button>
+        </div>
+        <div id="paste-roster-box-${key}" style="display:${pasteRosterBoxOpen[key] ? 'block' : 'none'}; margin-bottom:14px;">
+          <p class="desc" style="margin-top:0;">Kopiera spelarlistan från den andra sidan (t.ex. NFL.com Fantasy) och klistra in nedan, en spelare per rad. Vi matchar mot spelardatabasen och ersätter hela laget.</p>
+          <textarea id="paste-roster-textarea-${key}" rows="6" style="width:100%; background:var(--panel-2); color:var(--chalk); border:1px solid var(--line); border-radius:8px; padding:8px; font-family:inherit; font-size:13px;" placeholder="T.ex.
+Josh Allen
+Jahmyr Gibbs
+Ja'Marr Chase"></textarea>
+          <button class="btn" style="margin-top:8px;" data-action="import-pasted-roster" data-league="${key}">Importera inklistrad lista</button>
+          <div id="paste-roster-status-${key}" class="save-indicator show" style="margin-top:8px;">${pasteRosterStatusMsg[key] || ''}</div>
         </div>
         <div class="lineup-grid">${starterRowsHtml}</div>
 
@@ -2987,6 +3053,24 @@ document.addEventListener('click', (e) => {
   const sleeperSyncBtn = e.target.closest('[data-action="sleeper-sync-roster"]');
   if(sleeperSyncBtn){
     sleeperSyncRoster(sleeperSyncBtn.dataset.league);
+    return;
+  }
+
+  const togglePasteBtn = e.target.closest('[data-action="toggle-paste-roster"]');
+  if(togglePasteBtn){
+    const key = togglePasteBtn.dataset.league;
+    const box = document.getElementById('paste-roster-box-' + key);
+    if(box){
+      const nowOpen = box.style.display === 'none';
+      box.style.display = nowOpen ? 'block' : 'none';
+      pasteRosterBoxOpen[key] = nowOpen;
+    }
+    return;
+  }
+
+  const importPastedBtn = e.target.closest('[data-action="import-pasted-roster"]');
+  if(importPastedBtn){
+    importPastedRoster(importPastedBtn.dataset.league);
     return;
   }
 
