@@ -1333,6 +1333,11 @@ function removeWeeklyRosterPlayer(key, label){
   materializeWeeklyRoster(key);
   const data = state[key];
   data.currentRoster = data.currentRoster.filter(l => l !== label);
+  if(data.manualStarters){
+    Object.keys(data.manualStarters).forEach(slotIdx => {
+      if(data.manualStarters[slotIdx] === label) delete data.manualStarters[slotIdx];
+    });
+  }
   queueSave(key);
   renderWeeklyPage();
 }
@@ -1345,20 +1350,53 @@ function resetWeeklyRosterToDraft(key){
   renderWeeklyPage();
 }
 
-function buildWeeklyLineup(rosterSlots, roster){
+function buildWeeklyLineup(rosterSlots, roster, manualStarters){
   const picked = roster.filter(p => p.label).map(p => ({ ...p, parsed: parsePlayerLabel(p.label), pts: findWeeklyPts(p.label) }));
   const template = rosterSlots.map(t => ({ ...t, player: null }));
-  // Fyll de smalaste (mest specifika) slotsen forst sa FLEX inte tar en spelare nagon annan slot behovde
-  const order = template.map((t,i) => i).sort((a,b) => template[a].pos.length - template[b].pos.length);
   const used = new Set();
+
+  // 1) Applicera manuella byten forst (admin har explicit valt en spelare till en specifik startplats)
+  if(manualStarters){
+    Object.keys(manualStarters).forEach(slotIdxStr => {
+      const slotIdx = parseInt(slotIdxStr, 10);
+      const slot = template[slotIdx];
+      if(!slot) return;
+      const label = manualStarters[slotIdxStr];
+      const match = picked.find(p => p.label === label && !used.has(p) && slot.pos.includes(p.parsed.pos));
+      if(match){ slot.player = match; used.add(match); }
+    });
+  }
+
+  // 2) Fyll resten automatiskt - smalaste (mest specifika) slotsen forst sa FLEX inte tar en spelare nagon annan slot behovde
+  const remainingSlotIdx = template.map((t,i) => i).filter(i => !template[i].player);
+  const order = remainingSlotIdx.sort((a,b) => template[a].pos.length - template[b].pos.length);
   order.forEach(i => {
     const slot = template[i];
     const candidates = picked.filter(p => slot.pos.includes(p.parsed.pos) && !used.has(p));
     candidates.sort((a,b) => (b.pts ?? -1) - (a.pts ?? -1));
     if(candidates.length){ slot.player = candidates[0]; used.add(candidates[0]); }
   });
+
   const bench = picked.filter(p => !used.has(p)).sort((a,b) => (b.pts ?? -1) - (a.pts ?? -1));
-  return { template, bench };
+  const totalPts = template.reduce((sum, slot) => sum + (slot.player && slot.player.pts !== null && slot.player.pts !== undefined ? slot.player.pts : 0), 0);
+  return { template, bench, totalPts };
+}
+
+function swapWeeklyPlayerIn(key, slotIdx, label){
+  if(!requireAdmin()) return;
+  const data = state[key];
+  if(!data.manualStarters) data.manualStarters = {};
+  data.manualStarters[slotIdx] = label;
+  queueSave(key);
+  renderWeeklyPage();
+}
+
+function isPlayerAlreadyRostered(key, playerFull, playerTeam){
+  const roster = getWeeklyRoster(key);
+  return roster.some(p => {
+    const parsed = parsePlayerLabel(p.label);
+    return parsed.name.toLowerCase() === playerFull.toLowerCase() && parsed.team === playerTeam;
+  });
 }
 
 function renderWeeklyPage(){
@@ -1404,7 +1442,7 @@ function renderWeeklyPage(){
     const teamName = data.slots[data.myTeamIdx] || ('Lag ' + (data.myTeamIdx+1));
     const roster = getWeeklyRoster(key);
     const isManual = !!(data.currentRoster && Array.isArray(data.currentRoster));
-    const { template, bench } = buildWeeklyLineup(data.rosterSlots, roster);
+    const { template, bench, totalPts } = buildWeeklyLineup(data.rosterSlots, roster, data.manualStarters);
 
     const starterRowsHtml = template.map((slot, slotIdx) => {
       const posHint = slot.pos.join('/');
@@ -1431,17 +1469,67 @@ function renderWeeklyPage(){
       `;
     }).join('');
 
-    const benchRowsHtml = bench.length ? bench.map(p => {
-      const ptsText = p.pts !== null && p.pts !== undefined ? p.pts.toFixed(1) + ' p' : 'Ingen projektion';
+    // Bänken grupperad per egen position (som en egen mini-lista, med byt-in-knappar mot rätt startplatser)
+    const BENCH_POS_GROUPS = [
+      { pos: 'QB', label: 'QB' },
+      { pos: 'RB', label: 'RB' },
+      { pos: 'WR', label: 'WR' },
+      { pos: 'TE', label: 'TE' },
+      { pos: 'K', label: 'K' },
+      { pos: 'DST', label: 'DEF' }
+    ];
+    const benchGrouped = {};
+    BENCH_POS_GROUPS.forEach(g => benchGrouped[g.pos] = []);
+    benchGrouped['OVRIGT'] = [];
+    bench.forEach(p => {
+      const pp = p.parsed.pos;
+      if(benchGrouped[pp]) benchGrouped[pp].push(p); else benchGrouped['OVRIGT'].push(p);
+    });
+
+    function eligibleSlotsFor(pos){
+      return template.map((slot, idx) => ({ slot, idx })).filter(({slot}) => slot.pos.includes(pos));
+    }
+
+    const benchGroupsHtml = BENCH_POS_GROUPS.map(g => {
+      const players = benchGrouped[g.pos];
+      if(!players.length) return '';
+      const rows = players.map(p => {
+        const ptsText = p.pts !== null && p.pts !== undefined ? p.pts.toFixed(1) + ' p' : 'Ingen projektion';
+        const slots = eligibleSlotsFor(g.pos);
+        const swapButtons = slots.map(({slot, idx}) => `
+          <button class="btn" style="padding:2px 8px; font-size:10px; margin-top:4px; margin-right:4px;" data-action="swap-weekly-player-in" data-league="${key}" data-slot="${idx}" data-label="${escapeAttr(p.label)}">🔁 → ${escapeHtml(slot.label)}</button>
+        `).join('');
+        return `
+          <div class="lineup-slot">
+            <div class="lineup-slot-label">${g.label} · BN</div>
+            <div class="lineup-slot-player">${escapeHtml(p.label)}</div>
+            <div class="lineup-slot-sub">${ptsText}</div>
+            <div>${swapButtons}<button class="btn" style="padding:2px 8px; font-size:10px; margin-top:4px;" data-action="remove-weekly-player" data-league="${key}" data-label="${escapeAttr(p.label)}">✕ Ta bort</button></div>
+          </div>
+        `;
+      }).join('');
       return `
-        <div class="lineup-slot">
-          <div class="lineup-slot-label">BN</div>
-          <div class="lineup-slot-player">${escapeHtml(p.label)}</div>
-          <div class="lineup-slot-sub">${ptsText}</div>
-          <button class="btn" style="padding:2px 8px; font-size:10px; margin-top:4px;" data-action="remove-weekly-player" data-league="${key}" data-label="${escapeAttr(p.label)}">✕ Ta bort</button>
+        <div style="margin-bottom:12px;">
+          <div class="lineup-slot-label" style="margin-bottom:6px;">${g.label}-bänk</div>
+          <div class="lineup-grid">${rows}</div>
         </div>
       `;
-    }).join('') : '<div class="no-identity">Ingen på bänken.</div>';
+    }).join('');
+
+    const ovrigtBench = benchGrouped['OVRIGT'];
+    const ovrigtBenchHtml = ovrigtBench.length ? `
+      <div style="margin-bottom:12px;">
+        <div class="lineup-slot-label" style="margin-bottom:6px;">Övrigt/okänd position</div>
+        <div class="lineup-grid">${ovrigtBench.map(p => `
+          <div class="lineup-slot">
+            <div class="lineup-slot-player">${escapeHtml(p.label)}</div>
+            <button class="btn" style="padding:2px 8px; font-size:10px; margin-top:4px;" data-action="remove-weekly-player" data-league="${key}" data-label="${escapeAttr(p.label)}">✕ Ta bort</button>
+          </div>
+        `).join('')}</div>
+      </div>
+    ` : '';
+
+    const benchHtml = (benchGroupsHtml + ovrigtBenchHtml).trim() || '<div class="no-identity">Ingen på bänken.</div>';
 
     return `
       <div class="myteam-hero">
@@ -1450,13 +1538,13 @@ function renderWeeklyPage(){
         ${isManual ? '<p class="desc" style="margin-top:-4px; opacity:.7;">Laget avviker nu från draftresultatet.</p>' : ''}
 
         <div class="rounds-control" style="margin-bottom:8px;">
-          <div class="lineup-slot-label" style="margin:0;">STARTERS</div>
+          <div class="lineup-slot-label" style="margin:0;">STARTERS · totalt ${totalPts.toFixed(1)} p</div>
           <button class="btn" data-action="optimize-weekly-lineup" data-league="${key}">⚡ Optimera</button>
         </div>
         <div class="lineup-grid">${starterRowsHtml}</div>
 
         <div class="lineup-slot-label" style="margin:18px 0 8px;">BÄNK</div>
-        <div class="lineup-grid">${benchRowsHtml}</div>
+        ${benchHtml}
         <div class="rounds-control" style="flex-wrap:wrap; margin-top:10px;">
           <input type="text" class="player-search" autocomplete="off" data-action="weekly-player-search" data-league="${key}" data-bench="1" id="weekly-bench-input-${key}" placeholder="Sök spelare att lägga på bänken…" style="min-width:220px;" />
         </div>
@@ -2586,7 +2674,12 @@ function showWeeklySuggestions(input){
     if(slot) allowedPos = slot.pos;
   }
 
-  let matches = PLAYERS.filter(p => !allowedPos || allowedPos.includes(p.pos));
+  const rosterKeys = new Set(getWeeklyRoster(key).map(p => {
+    const parsed = parsePlayerLabel(p.label);
+    return `${parsed.team}|${normPlayerName(parsed.name)}`;
+  }));
+
+  let matches = PLAYERS.filter(p => (!allowedPos || allowedPos.includes(p.pos)) && !rosterKeys.has(`${p.team}|${normPlayerName(p.full || p.name)}`));
   if(query) matches = matches.filter(p => (p.full || p.name).toLowerCase().includes(query) || p.team.toLowerCase().includes(query));
   matches = matches.slice(0, 8);
 
@@ -2682,7 +2775,17 @@ document.addEventListener('click', (e) => {
 
   const optimizeBtn = e.target.closest('[data-action="optimize-weekly-lineup"]');
   if(optimizeBtn){
+    if(!requireAdmin()) return;
+    const key = optimizeBtn.dataset.league;
+    state[key].manualStarters = {};
+    queueSave(key);
     renderWeeklyPage();
+    return;
+  }
+
+  const swapInBtn = e.target.closest('[data-action="swap-weekly-player-in"]');
+  if(swapInBtn){
+    swapWeeklyPlayerIn(swapInBtn.dataset.league, swapInBtn.dataset.slot, swapInBtn.dataset.label);
     return;
   }
 
