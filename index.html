@@ -403,11 +403,11 @@
   .viewmode-btn.active{border-color:var(--silver); background:var(--panel-2);}
 
   /* iPhone-lage: zooma ut de tata tabellerna (draftboard, mock board, ADP-jamforelse)
-     sa mer far plats pa den smalare skarmen, ungefar som att zooma ut sidan. */
-  body.mode-iphone .board-card,
-  body.mode-iphone .adp-table-scroll,
-  body.mode-iphone .mock-board{
-    zoom: 0.8;
+     sa mer far plats pa den smalare skarmen, ungefar som att zooma ut sidan.
+     OBS: bara pa sjalva table-elementet, inte ocksa pa wrapper-div:en - annars dubbel-zoomas det. */
+  body.mode-iphone table.board,
+  body.mode-iphone table.adp-compare-table{
+    zoom: 0.65;
   }
 
   /* ADP comparison table */
