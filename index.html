@@ -402,31 +402,13 @@
   .viewmode-btn{padding:6px 10px; font-size:16px; line-height:1;}
   .viewmode-btn.active{border-color:var(--silver); background:var(--panel-2);}
 
-  /* iPhone-lage: storre/tydligare text i de tata tabellerna, sa man slipper kisa pa mindre skarmar.
-     Kompromiss: mer horisontell scroll behovs, men det stods redan via .table-scroll. */
-  body.mode-iphone thead th{ font-size:13px; padding:11px 8px; }
-  body.mode-iphone .round-num{ font-size:24px; }
-  body.mode-iphone tbody th.round-head{ min-width:88px; padding:10px 12px; }
-  body.mode-iphone td.pick-cell{ min-width:190px; padding:8px; }
-  body.mode-iphone .cell-inner{ padding:9px 10px 10px; }
-  body.mode-iphone .team-name{ font-size:15px; max-width:140px; }
-  body.mode-iphone .pick-num{ font-size:12px; }
-  body.mode-iphone .pos-badge{ font-size:12px; padding:3px 7px; }
-  body.mode-iphone .lineup-slot-player{ font-size:18px; }
-  body.mode-iphone .lineup-slot-label{ font-size:12.5px; }
-  body.mode-iphone .lineup-slot-sub{ font-size:12.5px; }
-  body.mode-iphone table.adp-compare-table{ font-size:15px; }
-  body.mode-iphone .adp-th, body.mode-iphone .adp-th-name{ font-size:12.5px; padding:11px 12px; }
-  body.mode-iphone .adp-td, body.mode-iphone .adp-td-name{ padding:10px 12px; }
-  body.mode-iphone .adp-td-team{ font-size:12.5px; }
-  body.mode-iphone .mock-board .cell-inner{ font-size:14px; }
-  body.mode-iphone h1{ font-size:44px; }
-  body.mode-iphone .sub{ font-size:15px; }
-  body.mode-iphone .eyebrow{ font-size:13px; }
-  body.mode-iphone .nav-btn{ font-size:19px; padding:10px 20px; }
-  body.mode-iphone .btn{ font-size:13px; padding:9px 14px; }
-  body.mode-iphone .card h2{ font-size:25px; }
-  body.mode-iphone .desc{ font-size:14.5px; }
+  /* iPhone-lage: zooma ut de tata tabellerna (draftboard, mock board, ADP-jamforelse)
+     sa mer far plats pa den smalare skarmen, ungefar som att zooma ut sidan. */
+  body.mode-iphone .board-card,
+  body.mode-iphone .adp-table-scroll,
+  body.mode-iphone .mock-board{
+    zoom: 0.8;
+  }
 
   /* ADP comparison table */
   .adp-table-scroll{margin:0 18px 4px; width:calc(100% - 36px);}
@@ -4656,6 +4638,10 @@ function applyViewMode(mode){
   const ipadBtn = document.getElementById('viewmode-ipad-btn');
   if(iphoneBtn) iphoneBtn.classList.toggle('active', mode === 'iphone');
   if(ipadBtn) ipadBtn.classList.toggle('active', mode === 'ipad');
+  // Rita om det som ar synligt just nu sa layouten byts direkt utan att behova navigera bort och tillbaka
+  if(state.douche) renderLeaguePage('douche');
+  if(state.balla) renderLeaguePage('balla');
+  if(typeof mockDraft !== 'undefined' && mockDraft) renderMockPage();
 }
 
 function setViewMode(mode){
