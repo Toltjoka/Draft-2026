@@ -2348,8 +2348,13 @@ function renderMockPage(){
           <div class="allteams-grid">
             ${teamNames.map((name,i) => {
               const legacy = LEGACY_2025_ROSTERS[i] || { roster: [] };
+              const rosterWithAdp = legacy.roster.map(p => {
+                const current = findCurrentPlayer(p);
+                const adpVal = current ? parseFloat(current.adp) : NaN;
+                return { p, adpVal, adpText: current ? current.adp : 'ej rankad' };
+              }).sort((a,b) => (isNaN(a.adpVal)?9999:a.adpVal) - (isNaN(b.adpVal)?9999:b.adpVal));
               const optionsHtml = ['<option value="">— Ingen keeper —</option>']
-                .concat(legacy.roster.map(p => `<option value="${escapeAttr(p.name + ' (' + p.pos + '-' + p.team + ')')}">${escapeHtml(p.pos)} · ${escapeHtml(p.name)} (${escapeHtml(p.team)})</option>`))
+                .concat(rosterWithAdp.map(({p,adpText}) => `<option value="${escapeAttr(p.name + ' (' + p.pos + '-' + p.team + ')')}">${escapeHtml(p.pos)} · ${escapeHtml(p.name)} (${escapeHtml(p.team)}) · ADP ${escapeHtml(adpText)}</option>`))
                 .join('');
               return `
                 <div class="allteams-team">
