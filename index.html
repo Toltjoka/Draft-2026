@@ -2145,6 +2145,7 @@ function mockStart(){
     rosterSlots: (leagueData && leagueData.rosterSlots && leagueData.rosterSlots.length) ? leagueData.rosterSlots : defaultRosterSlots(),
     picks: {}
   };
+  Object.keys(mockShownTurnPopups).forEach(k => delete mockShownTurnPopups[k]);
   saveMockDraft();
   mockRunAutoUntilMyTurn();
   renderMockPage();
@@ -2179,11 +2180,110 @@ function mockPickPlayer(label){
   if(!key || !mockIsMyPick(key)) return;
   mockDraft.picks[key] = label;
   saveMockDraft();
+  hideTurnPopup();
   mockRunAutoUntilMyTurn();
   renderMockPage();
 }
 
 let mockSetupLeagueKey = null; // null = anvand lastLeagueViewed tills anvandaren valt aktivt
+
+const mockShownTurnPopups = {};
+function mockMaybeShowTurnPopup(pickKey){
+  if(mockShownTurnPopups[pickKey]) return;
+  mockShownTurnPopups[pickKey] = true;
+  mockShowTurnPopup(pickKey);
+}
+
+function mockShowTurnPopup(pickKey){
+  const md = mockDraft;
+  const [rStr, iStr] = pickKey.split('-');
+  const round = parseInt(rStr,10), i = parseInt(iStr,10);
+  const overallPick = (round-1)*md.teams + i + 1;
+
+  const taken = new Set(Object.values(md.picks).filter(Boolean));
+  const available = PLAYERS.filter(p => !taken.has(formatPlayerLabel(p)));
+  const needed = mockGetNeededPositions(md.myIdx);
+  const sorted = available.slice().sort((a,b) => mockGetAdpValue(a, md.adpSource) - mockGetAdpValue(b, md.adpSource));
+  const top5 = sorted.slice(0,5);
+
+  const rowsHtml = top5.map(p => {
+    const fillsNeed = needed.has(p.pos);
+    const adpVal = mockGetAdpValue(p, md.adpSource);
+    const adpDisplay = adpVal === Infinity ? '–' : (md.adpSource === 'AVERAGE' ? p.adp : adpVal);
+    return `
+      <div class="turn-pick-row">
+        <div class="turn-pick-info">
+          <span class="pos-badge ${posClass(p.pos)}">${escapeHtml(p.pos)}</span>
+          <span class="turn-pick-name">${escapeHtml(p.name)}</span>
+          <span class="turn-pick-team">${escapeHtml(p.team)}</span>
+          ${fillsNeed ? '<span class="turn-pick-need">✓ Fyller behov</span>' : ''}
+          <span class="turn-pick-adp">ADP ${escapeHtml(String(adpDisplay))}</span>
+        </div>
+        <button class="btn turn-pick-btn" data-action="mock-draft-from-popup" data-label="${escapeAttr(formatPlayerLabel(p))}">Draft</button>
+      </div>
+    `;
+  }).join('');
+
+  const neededListHtml = needed.size ? `<p class="turn-popup-needs">Din trupp behöver just nu: ${[...needed].join(', ')}</p>` : '<p class="turn-popup-needs">Startlaget är fyllt — dags att fylla bänken.</p>';
+
+  const body = document.getElementById('turn-popup-body');
+  body.innerHTML = `
+    <p class="turn-popup-sub">Runda ${round} · Pick #${overallPick} (Mock Draft)</p>
+    ${neededListHtml}
+    <div class="turn-popup-list">${rowsHtml}</div>
+  `;
+  document.getElementById('turn-popup-overlay').classList.add('show');
+}
+
+function mockBuildBoardHtml(currentKey){
+  const md = mockDraft;
+  const teamName = (idx) => (md.teamNames && md.teamNames[idx]) || ('Lag ' + (idx+1));
+
+  // Snabbslagning: for varje runda+kolumn, vilket "i" (pickindex) motsvarar den kolumnens lag
+  const idxForCol = [];
+  for(let r = 1; r <= md.rounds; r++){
+    idxForCol[r] = [];
+    for(let colIdx = 0; colIdx < md.teams; colIdx++){
+      for(let ii = 0; ii < md.teams; ii++){
+        if(mockOrder(r, ii, md.teams) - 1 === colIdx){ idxForCol[r][colIdx] = ii; break; }
+      }
+    }
+  }
+
+  const theadHtml = `<th class="corner">Runda</th>` + Array.from({length:md.teams},(_,colIdx) => {
+    const isMe = colIdx === md.myIdx;
+    return `<th style="${isMe ? 'color:var(--silver); font-weight:700;' : ''}">${escapeHtml(teamName(colIdx))}${isMe ? ' ★' : ''}</th>`;
+  }).join('');
+
+  const rowsHtml = Array.from({length: md.rounds}, (_,rIdx) => {
+    const r = rIdx + 1;
+    const cellsHtml = Array.from({length: md.teams}, (_,colIdx) => {
+      const i = idxForCol[r][colIdx];
+      const key = r + '-' + i;
+      const label = md.picks[key];
+      const isCurrent = key === currentKey;
+      const isMeCol = colIdx === md.myIdx;
+      const meStyle = isMeCol ? 'background: color-mix(in srgb, var(--silver) 10%, var(--panel));' : '';
+      if(!label){
+        return `<td class="pick-cell${isCurrent?' current':''}" id="${isCurrent ? 'mock-current-cell' : ''}"><div class="cell-inner" style="${meStyle} text-align:center; opacity:.4;">—</div></td>`;
+      }
+      const parsed = parsePlayerLabel(label);
+      return `<td class="pick-cell${isCurrent?' current':''}" id="${isCurrent ? 'mock-current-cell' : ''}"><div class="cell-inner" style="${meStyle} padding:6px 7px;"><span class="pos-badge ${posClass(parsed.pos)}" style="font-size:9px; padding:1px 4px;">${escapeHtml(parsed.pos)}</span><br>${escapeHtml(parsed.name)}</div></td>`;
+    }).join('');
+    return `<tr><th class="round-head"><span class="round-num">R${r}</span></th>${cellsHtml}</tr>`;
+  }).join('');
+
+  return `
+    <div class="card board-card" style="padding:0; overflow:hidden;">
+      <div class="table-scroll">
+        <table class="board mock-board">
+          <thead><tr>${theadHtml}</tr></thead>
+          <tbody>${rowsHtml}</tbody>
+        </table>
+      </div>
+    </div>
+  `;
+}
 
 function renderMockPage(){
   const el = document.getElementById('page-MOCK');
@@ -2261,24 +2361,12 @@ function renderMockPage(){
         <input type="text" class="player-search" autocomplete="off" data-action="mock-player-search" placeholder="Sök spelare…" style="min-width:220px; margin-top:6px;" />
       </div>
     `;
+    mockMaybeShowTurnPopup(currentKey);
   } else {
     statusHtml = `<div class="lineup-slot"><div class="lineup-slot-label">DRAFTAR…</div></div>`;
   }
 
-  const recentPicks = [];
-  for(let r = 1; r <= md.rounds && recentPicks.length < 15; r++){
-    for(let i = 0; i < md.teams; i++){
-      const key = r + '-' + i;
-      if(md.picks[key]) recentPicks.push({ round:r, teamIdx: mockOrder(r,i,md.teams)-1, label: md.picks[key] });
-    }
-  }
-  recentPicks.reverse();
-  const recentHtml = recentPicks.slice(0,20).map(p => `
-    <div class="lineup-slot" style="padding:6px 10px;">
-      <div class="lineup-slot-sub">R${p.round} · ${p.teamIdx === md.myIdx ? 'DU' : escapeHtml(teamName(p.teamIdx))}</div>
-      <div class="lineup-slot-player" style="font-size:13px;">${escapeHtml(p.label)}</div>
-    </div>
-  `).join('') || '<p class="desc">Inga val gjorda än.</p>';
+  const boardHtml = mockBuildBoardHtml(currentKey);
 
   const allTeamsHtml = Array.from({length: md.teams}, (_,teamIdx) => {
     const isMe = teamIdx === md.myIdx;
@@ -2302,14 +2390,15 @@ function renderMockPage(){
       ${statusHtml}
       <div class="lineup-slot-label" style="margin:16px 0 8px;">DITT ROSTER</div>
       <div class="bench-list">${myRosterHtml}</div>
-      <div class="lineup-slot-label" style="margin:16px 0 8px;">SENASTE VALEN</div>
-      <div class="lineup-grid">${recentHtml}</div>
     </div>
+    <div class="lineup-slot-label" style="margin:0 0 8px;">DRAFTBOARD</div>
+    ${boardHtml}
     <div class="card">
       <h2>Alla lag</h2>
       <div class="allteams-grid">${allTeamsHtml}</div>
     </div>
   `;
+  if(currentKey) scrollToMockCurrentPick();
 }
 
 function renderWeeklyPage(){
@@ -2960,6 +3049,16 @@ function scrollToCurrentPick(key){
     const pageEl = document.getElementById('page-'+key);
     if(pageEl && pageEl.classList.contains('active')){
       const cell = document.getElementById('current-pick-cell-'+key);
+      if(cell) cell.scrollIntoView({behavior:'smooth', block:'center'});
+    }
+  });
+}
+
+function scrollToMockCurrentPick(){
+  requestAnimationFrame(() => {
+    const pageEl = document.getElementById('page-MOCK');
+    if(pageEl && pageEl.classList.contains('active')){
+      const cell = document.getElementById('mock-current-cell');
       if(cell) cell.scrollIntoView({behavior:'smooth', block:'center'});
     }
   });
@@ -3941,6 +4040,13 @@ document.addEventListener('click', (e) => {
     const label = mockSuggestRow.dataset.mockFreetext || mockSuggestRow.dataset.mockLabel;
     mockPickPlayer(label);
     hideSuggestions();
+    return;
+  }
+
+  const mockPopupDraftBtn = e.target.closest('[data-action="mock-draft-from-popup"]');
+  if(mockPopupDraftBtn){
+    mockPickPlayer(mockPopupDraftBtn.dataset.label);
+    hideTurnPopup();
     return;
   }
 
