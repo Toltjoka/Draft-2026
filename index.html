@@ -399,6 +399,28 @@
   table.board th, table.board td{border-bottom:1px solid var(--line); border-right:1px solid var(--line);}
   table.board th:last-child, table.board td:last-child{border-right:none;}
 
+  .viewmode-btn{padding:6px 10px; font-size:16px; line-height:1;}
+  .viewmode-btn.active{border-color:var(--silver); background:var(--panel-2);}
+
+  /* iPhone-lage: storre/tydligare text i de tata tabellerna, sa man slipper kisa pa mindre skarmar.
+     Kompromiss: mer horisontell scroll behovs, men det stods redan via .table-scroll. */
+  body.mode-iphone thead th{ font-size:13px; padding:11px 8px; }
+  body.mode-iphone .round-num{ font-size:24px; }
+  body.mode-iphone tbody th.round-head{ min-width:88px; padding:10px 12px; }
+  body.mode-iphone td.pick-cell{ min-width:190px; padding:8px; }
+  body.mode-iphone .cell-inner{ padding:9px 10px 10px; }
+  body.mode-iphone .team-name{ font-size:15px; max-width:140px; }
+  body.mode-iphone .pick-num{ font-size:12px; }
+  body.mode-iphone .pos-badge{ font-size:12px; padding:3px 7px; }
+  body.mode-iphone .lineup-slot-player{ font-size:18px; }
+  body.mode-iphone .lineup-slot-label{ font-size:12.5px; }
+  body.mode-iphone .lineup-slot-sub{ font-size:12.5px; }
+  body.mode-iphone table.adp-compare-table{ font-size:15px; }
+  body.mode-iphone .adp-th, body.mode-iphone .adp-th-name{ font-size:12.5px; padding:11px 12px; }
+  body.mode-iphone .adp-td, body.mode-iphone .adp-td-name{ padding:10px 12px; }
+  body.mode-iphone .adp-td-team{ font-size:12.5px; }
+  body.mode-iphone .mock-board .cell-inner{ font-size:14px; }
+
   /* ADP comparison table */
   .adp-table-scroll{margin:0 18px 4px; width:calc(100% - 36px);}
   table.adp-compare-table{border-collapse:separate; border-spacing:0; width:100%; min-width:max-content; font-size:12.5px;}
@@ -641,6 +663,10 @@
           <option value="bears">Chicago Bears</option>
         </select>
       </label>
+      <span class="viewmode-picker" style="margin-left:10px;">
+        <button class="btn viewmode-btn" id="viewmode-iphone-btn" data-action="set-viewmode" data-mode="iphone" title="iPhone-läge (större/tydligare)">📱</button>
+        <button class="btn viewmode-btn" id="viewmode-ipad-btn" data-action="set-viewmode" data-mode="ipad" title="iPad/Web-läge (kompakt)">💻</button>
+      </span>
     </div>
     <div class="backup-row">
       <button class="backup-btn" data-action="export-backup">💾 Exportera backup</button>
@@ -4127,6 +4153,9 @@ document.addEventListener('click', (e) => {
   const mockLeagueChangeBtn = e.target.closest('button[data-action="mock-league-change"]');
   if(mockLeagueChangeBtn){ switchMockView(mockLeagueChangeBtn.value); return; }
 
+  const viewModeBtn = e.target.closest('[data-action="set-viewmode"]');
+  if(viewModeBtn){ setViewMode(viewModeBtn.dataset.mode); return; }
+
   const mockSuggestRow = e.target.closest('[data-mock-label], [data-mock-freetext]');
   if(mockSuggestRow){
     const label = mockSuggestRow.dataset.mockFreetext || mockSuggestRow.dataset.mockLabel;
@@ -4613,8 +4642,33 @@ function switchTheme(themeId){
   try{ localStorage.setItem('draft:theme', themeId); }catch(e){ /* ignore */ }
 }
 
+function applyViewMode(mode){
+  document.body.classList.remove('mode-iphone', 'mode-ipad');
+  document.body.classList.add('mode-' + mode);
+  const iphoneBtn = document.getElementById('viewmode-iphone-btn');
+  const ipadBtn = document.getElementById('viewmode-ipad-btn');
+  if(iphoneBtn) iphoneBtn.classList.toggle('active', mode === 'iphone');
+  if(ipadBtn) ipadBtn.classList.toggle('active', mode === 'ipad');
+}
+
+function setViewMode(mode){
+  applyViewMode(mode);
+  try{ localStorage.setItem('draft:viewmode', mode); }catch(e){ /* ignore */ }
+}
+
+function loadViewMode(){
+  let mode = null;
+  try{ mode = localStorage.getItem('draft:viewmode'); }catch(e){ /* ignore */ }
+  if(mode !== 'iphone' && mode !== 'ipad'){
+    // Ingen sparad preferens - gissa utifran skarmbredd (smal skarm = troligen iPhone)
+    mode = (window.innerWidth && window.innerWidth < 500) ? 'iphone' : 'ipad';
+  }
+  applyViewMode(mode);
+}
+
 async function init(){
   loadTheme();
+  loadViewMode();
   updateSoundUploadStatus();
   updateLegacyTabVisibility();
   updateLeagueContextHighlight();
