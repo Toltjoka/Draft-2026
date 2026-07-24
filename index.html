@@ -399,17 +399,6 @@
   table.board th, table.board td{border-bottom:1px solid var(--line); border-right:1px solid var(--line);}
   table.board th:last-child, table.board td:last-child{border-right:none;}
 
-  .viewmode-btn{padding:6px 10px; font-size:16px; line-height:1;}
-  .viewmode-btn.active{border-color:var(--silver); background:var(--panel-2);}
-
-  /* iPhone-lage: zooma ut de tata tabellerna (draftboard, mock board, ADP-jamforelse)
-     sa mer far plats pa den smalare skarmen, ungefar som att zooma ut sidan.
-     OBS: bara pa sjalva table-elementet, inte ocksa pa wrapper-div:en - annars dubbel-zoomas det. */
-  body.mode-iphone table.board,
-  body.mode-iphone table.adp-compare-table{
-    zoom: 0.65;
-  }
-
   /* ADP comparison table */
   .adp-table-scroll{margin:0 18px 4px; width:calc(100% - 36px);}
   table.adp-compare-table{border-collapse:separate; border-spacing:0; width:100%; min-width:max-content; font-size:12.5px;}
@@ -652,10 +641,6 @@
           <option value="bears">Chicago Bears</option>
         </select>
       </label>
-      <span class="viewmode-picker" style="margin-left:10px;">
-        <button class="btn viewmode-btn" id="viewmode-iphone-btn" data-action="set-viewmode" data-mode="iphone" title="iPhone-läge (större/tydligare)">📱</button>
-        <button class="btn viewmode-btn" id="viewmode-ipad-btn" data-action="set-viewmode" data-mode="ipad" title="iPad/Web-läge (kompakt)">💻</button>
-      </span>
     </div>
     <div class="backup-row">
       <button class="backup-btn" data-action="export-backup">💾 Exportera backup</button>
@@ -4142,9 +4127,6 @@ document.addEventListener('click', (e) => {
   const mockLeagueChangeBtn = e.target.closest('button[data-action="mock-league-change"]');
   if(mockLeagueChangeBtn){ switchMockView(mockLeagueChangeBtn.value); return; }
 
-  const viewModeBtn = e.target.closest('[data-action="set-viewmode"]');
-  if(viewModeBtn){ setViewMode(viewModeBtn.dataset.mode); return; }
-
   const mockSuggestRow = e.target.closest('[data-mock-label], [data-mock-freetext]');
   if(mockSuggestRow){
     const label = mockSuggestRow.dataset.mockFreetext || mockSuggestRow.dataset.mockLabel;
@@ -4631,37 +4613,8 @@ function switchTheme(themeId){
   try{ localStorage.setItem('draft:theme', themeId); }catch(e){ /* ignore */ }
 }
 
-function applyViewMode(mode){
-  document.body.classList.remove('mode-iphone', 'mode-ipad');
-  document.body.classList.add('mode-' + mode);
-  const iphoneBtn = document.getElementById('viewmode-iphone-btn');
-  const ipadBtn = document.getElementById('viewmode-ipad-btn');
-  if(iphoneBtn) iphoneBtn.classList.toggle('active', mode === 'iphone');
-  if(ipadBtn) ipadBtn.classList.toggle('active', mode === 'ipad');
-  // Rita om det som ar synligt just nu sa layouten byts direkt utan att behova navigera bort och tillbaka
-  if(state.douche) renderLeaguePage('douche');
-  if(state.balla) renderLeaguePage('balla');
-  if(typeof mockDraft !== 'undefined' && mockDraft) renderMockPage();
-}
-
-function setViewMode(mode){
-  applyViewMode(mode);
-  try{ localStorage.setItem('draft:viewmode', mode); }catch(e){ /* ignore */ }
-}
-
-function loadViewMode(){
-  let mode = null;
-  try{ mode = localStorage.getItem('draft:viewmode'); }catch(e){ /* ignore */ }
-  if(mode !== 'iphone' && mode !== 'ipad'){
-    // Ingen sparad preferens - gissa utifran skarmbredd (smal skarm = troligen iPhone)
-    mode = (window.innerWidth && window.innerWidth < 500) ? 'iphone' : 'ipad';
-  }
-  applyViewMode(mode);
-}
-
 async function init(){
   loadTheme();
-  loadViewMode();
   updateSoundUploadStatus();
   updateLegacyTabVisibility();
   updateLeagueContextHighlight();
