@@ -2183,7 +2183,7 @@ function mockPickPlayer(label){
   renderMockPage();
 }
 
-let mockSetupLeagueKey = 'douche';
+let mockSetupLeagueKey = null; // null = anvand lastLeagueViewed tills anvandaren valt aktivt
 
 function renderMockPage(){
   const el = document.getElementById('page-MOCK');
@@ -2195,8 +2195,9 @@ function renderMockPage(){
     const adpOptionsHtml = ['<option value="AVERAGE">Genomsnitt (alla källor)</option>']
       .concat(ADP_SOURCES_LIST.map(s => `<option value="${escapeAttr(s)}">${escapeHtml(s)}</option>`)).join('');
 
-    const cfg = LEAGUES[mockSetupLeagueKey];
-    const leagueData = state[mockSetupLeagueKey];
+    const activeLeagueKey = mockSetupLeagueKey || (LEAGUES[lastLeagueViewed] ? lastLeagueViewed : 'douche');
+    const cfg = LEAGUES[activeLeagueKey];
+    const leagueData = state[activeLeagueKey];
     const teamNames = (leagueData && leagueData.slots && leagueData.slots.length) ? leagueData.slots : (cfg.defaultSlotNames || Array.from({length:cfg.n},(_,i)=>'Lag '+(i+1)));
     const defaultMyIdx = (leagueData && leagueData.myTeamIdx !== null && leagueData.myTeamIdx !== undefined) ? leagueData.myTeamIdx : 0;
     const defaultRoundsVal = (leagueData && leagueData.rounds) ? leagueData.rounds : cfg.defaultRounds;
@@ -2209,8 +2210,8 @@ function renderMockPage(){
         <div class="rounds-control" style="margin-bottom:10px;">
           Vilken liga vill du träna för?
           <select id="mock-league-select" data-action="mock-league-change">
-            <option value="douche" ${mockSetupLeagueKey==='douche'?'selected':''}>${escapeHtml(LEAGUES.douche.name)}</option>
-            <option value="balla" ${mockSetupLeagueKey==='balla'?'selected':''}>${escapeHtml(LEAGUES.balla.name)}</option>
+            <option value="douche" ${activeLeagueKey==='douche'?'selected':''}>${escapeHtml(LEAGUES.douche.name)}</option>
+            <option value="balla" ${activeLeagueKey==='balla'?'selected':''}>${escapeHtml(LEAGUES.balla.name)}</option>
           </select>
         </div>
         <div class="rounds-control" style="margin-bottom:10px;">
@@ -2279,6 +2280,20 @@ function renderMockPage(){
     </div>
   `).join('') || '<p class="desc">Inga val gjorda än.</p>';
 
+  const allTeamsHtml = Array.from({length: md.teams}, (_,teamIdx) => {
+    const isMe = teamIdx === md.myIdx;
+    const roster = mockTeamRosterLabels(teamIdx).map(label => ({ label, parsed: parsePlayerLabel(label) }));
+    const picksHtml = roster.length ? roster.map(p => `
+      <div class="allteams-pick">${escapeHtml(p.parsed.name)} <span class="allteams-pos pos-badge ${posClass(p.parsed.pos)}">${escapeHtml(p.parsed.pos)}</span></div>
+    `).join('') : '<div class="allteams-pick empty">Inga val än</div>';
+    return `
+      <div class="allteams-team${isMe?' is-me':''}">
+        <div class="allteams-team-name">${escapeHtml(teamName(teamIdx))}${isMe ? ' <span class="me-badge">DU</span>' : ''}</div>
+        <div class="allteams-picks">${picksHtml}</div>
+      </div>
+    `;
+  }).join('');
+
   el.innerHTML = `
     <div class="myteam-hero">
       <div class="myteam-league-name">Mock Draft · ${escapeHtml(LEAGUES[md.leagueKey] ? LEAGUES[md.leagueKey].name : '')} · ADP: ${md.adpSource === 'AVERAGE' ? 'Genomsnitt' : escapeHtml(md.adpSource)}</div>
@@ -2289,6 +2304,10 @@ function renderMockPage(){
       <div class="bench-list">${myRosterHtml}</div>
       <div class="lineup-slot-label" style="margin:16px 0 8px;">SENASTE VALEN</div>
       <div class="lineup-grid">${recentHtml}</div>
+    </div>
+    <div class="card">
+      <h2>Alla lag</h2>
+      <div class="allteams-grid">${allTeamsHtml}</div>
     </div>
   `;
 }
