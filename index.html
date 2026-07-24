@@ -2344,17 +2344,23 @@ function renderMockPage(){
         </div>
         ${activeLeagueKey === 'douche' ? `
           <div class="lineup-slot-label" style="margin:16px 0 10px;">🔒 KEEPERS (valfritt — Douchebag är keeper-liga)</div>
-          <p class="desc" style="margin-top:0;">Gissa vilka två spelare varje lag behåller från 2025 — de läggs automatiskt in som val 1 och 2 för det laget innan draften kör igång. Lämna tomt för lag du vill se draftas live istället (t.ex. ditt eget).</p>
+          <p class="desc" style="margin-top:0;">Gissa vilka två spelare varje lag behåller från 2025 — valen kommer från lagets faktiska 2025-roster. De läggs automatiskt in som val 1 och 2 för det laget innan draften kör igång. Lämna på "— Ingen keeper —" för lag du vill se draftas live istället (t.ex. ditt eget).</p>
           <div class="allteams-grid">
-            ${teamNames.map((name,i) => `
-              <div class="allteams-team">
-                <div class="allteams-team-name">${escapeHtml(name)}</div>
-                <div class="rounds-control" style="flex-wrap:wrap; margin-top:6px;">
-                  <input type="text" list="mock-keeper-datalist" id="mock-keeper-input-${i}-0" placeholder="Keeper 1" style="min-width:140px;" />
-                  <input type="text" list="mock-keeper-datalist" id="mock-keeper-input-${i}-1" placeholder="Keeper 2" style="min-width:140px;" />
+            ${teamNames.map((name,i) => {
+              const legacy = LEGACY_2025_ROSTERS[i] || { roster: [] };
+              const optionsHtml = ['<option value="">— Ingen keeper —</option>']
+                .concat(legacy.roster.map(p => `<option value="${escapeAttr(p.name + ' (' + p.pos + '-' + p.team + ')')}">${escapeHtml(p.pos)} · ${escapeHtml(p.name)} (${escapeHtml(p.team)})</option>`))
+                .join('');
+              return `
+                <div class="allteams-team">
+                  <div class="allteams-team-name">${escapeHtml(name)}${legacy.manager ? ` <span style="opacity:.6; font-weight:400;">(${escapeHtml(legacy.manager)} 2025)</span>` : ''}</div>
+                  <div class="rounds-control" style="flex-wrap:wrap; margin-top:6px;">
+                    <select id="mock-keeper-input-${i}-0" style="min-width:160px;">${optionsHtml}</select>
+                    <select id="mock-keeper-input-${i}-1" style="min-width:160px;">${optionsHtml}</select>
+                  </div>
                 </div>
-              </div>
-            `).join('')}
+              `;
+            }).join('')}
           </div>
         ` : ''}
         <button class="btn" style="font-size:16px; padding:12px 28px; margin-top:14px;" data-action="mock-start">🚀 Starta mock draft</button>
