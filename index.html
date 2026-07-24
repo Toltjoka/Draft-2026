@@ -2007,19 +2007,44 @@ async function importRosterFromScreenshots(key){
 
 // ---- Skarmdumpsimport: las av rosterbilder med bildigenkanning istallet for att klistra in text ----
 // ---- Mock Draft: traningsdraft, ingen admin behovs, auto-draftar alla utom mig ----
-let mockDraft = null; // laddas fran localStorage vid behov
+let mockDraft = null; // pekar pa mockDraftByLeague[currentMockViewKey]
+let mockDraftByLeague = {}; // { douche: {...}, balla: {...} } - laddas fran localStorage vid behov
+let currentMockViewKey = null; // vilken ligas mock som visas just nu i Mock Draft-fliken
 
 function loadMockDraft(){
-  if(mockDraft !== null) return mockDraft;
-  try{
-    const saved = localStorage.getItem('draft:mockDraft');
-    mockDraft = saved ? JSON.parse(saved) : { setup: false, started: false, paused: false };
-  }catch(e){ mockDraft = { setup: false, started: false, paused: false }; }
+  if(!currentMockViewKey){
+    currentMockViewKey = (LEAGUES[lastLeagueViewed] ? lastLeagueViewed : 'douche');
+  }
+  if(!mockDraftByLeague[currentMockViewKey]){
+    try{
+      const saved = localStorage.getItem('draft:mockDraft:' + currentMockViewKey);
+      mockDraftByLeague[currentMockViewKey] = saved ? JSON.parse(saved) : { setup: false, started: false, paused: false };
+    }catch(e){ mockDraftByLeague[currentMockViewKey] = { setup: false, started: false, paused: false }; }
+  }
+  mockDraft = mockDraftByLeague[currentMockViewKey];
   return mockDraft;
 }
 
 function saveMockDraft(){
-  try{ localStorage.setItem('draft:mockDraft', JSON.stringify(mockDraft)); }catch(e){ /* ignore */ }
+  try{ localStorage.setItem('draft:mockDraft:' + currentMockViewKey, JSON.stringify(mockDraft)); }catch(e){ /* ignore */ }
+}
+
+function switchMockView(key){
+  currentMockViewKey = key;
+  mockDraft = null;
+  loadMockDraft();
+  renderMockPage();
+}
+
+// Hamtar (utan att paverka vilken mock som visas i Mock Draft-fliken) en specifik ligas
+// mock draft-data, t.ex. for att visa "tagen"-status i rankinglistorna.
+function getMockDraftForLeague(key){
+  if(mockDraftByLeague[key]) return mockDraftByLeague[key];
+  try{
+    const saved = localStorage.getItem('draft:mockDraft:' + key);
+    mockDraftByLeague[key] = saved ? JSON.parse(saved) : { setup: false, started: false, paused: false };
+  }catch(e){ mockDraftByLeague[key] = { setup: false, started: false, paused: false }; }
+  return mockDraftByLeague[key];
 }
 
 function mockOrder(round, idx, n){
@@ -2140,12 +2165,14 @@ function mockStart(){
   const adpSource = adpSel ? adpSel.value : 'AVERAGE';
   const rounds = roundsInput ? parseInt(roundsInput.value,10) : (leagueData && leagueData.rounds ? leagueData.rounds : cfg.defaultRounds);
 
+  currentMockViewKey = leagueKey;
   mockDraft = {
     setup: true, started: true, paused: false,
     leagueKey, teams: cfg.n, teamNames, myIdx, rounds, adpSource,
     rosterSlots: (leagueData && leagueData.rosterSlots && leagueData.rosterSlots.length) ? leagueData.rosterSlots : defaultRosterSlots(),
     picks: {}
   };
+  mockDraftByLeague[leagueKey] = mockDraft;
 
   // Keepers: om ifyllda, lagg dem som val 1 och 2 for respektive lag innan resten simuleras
   if(leagueKey === 'douche'){
@@ -2185,6 +2212,7 @@ function mockResume(){
 function mockStop(){
   if(!confirm('Avsluta mockdraften och nollställ? Går inte att ångra.')) return;
   mockDraft = { setup: false, started: false, paused: false };
+  mockDraftByLeague[currentMockViewKey] = mockDraft;
   saveMockDraft();
   renderMockPage();
 }
@@ -2200,8 +2228,6 @@ function mockPickPlayer(label){
   mockRunAutoUntilMyTurn();
   renderMockPage();
 }
-
-let mockSetupLeagueKey = null; // null = anvand lastLeagueViewed tills anvandaren valt aktivt
 
 const mockShownTurnPopups = {};
 function mockMaybeShowTurnPopup(pickKey){
@@ -2311,7 +2337,7 @@ function renderMockPage(){
     const adpOptionsHtml = ['<option value="AVERAGE">Genomsnitt (alla källor)</option>']
       .concat(ADP_SOURCES_LIST.map(s => `<option value="${escapeAttr(s)}">${escapeHtml(s)}</option>`)).join('');
 
-    const activeLeagueKey = mockSetupLeagueKey || (LEAGUES[lastLeagueViewed] ? lastLeagueViewed : 'douche');
+    const activeLeagueKey = currentMockViewKey;
     const cfg = LEAGUES[activeLeagueKey];
     const leagueData = state[activeLeagueKey];
     const teamNames = (leagueData && leagueData.slots && leagueData.slots.length) ? leagueData.slots : (cfg.defaultSlotNames || Array.from({length:cfg.n},(_,i)=>'Lag '+(i+1)));
@@ -2379,6 +2405,20 @@ function renderMockPage(){
   const myTurn = !isDone && !md.paused && mockIsMyPick(currentKey);
   const teamName = (idx) => (md.teamNames && md.teamNames[idx]) || ('Lag ' + (idx+1));
 
+  const otherKey = currentMockViewKey === 'douche' ? 'balla' : 'douche';
+  const otherMock = mockDraftByLeague[otherKey];
+  const otherStatus = (() => {
+    if(!otherMock || !otherMock.started) return 'inte igång';
+    if(otherMock.paused) return 'pausad';
+    return 'pågår';
+  })();
+  const leagueSwitcherHtml = `
+    <div class="rounds-control" style="margin-bottom:10px;">
+      <button class="btn" disabled style="opacity:.9;">${escapeHtml(LEAGUES[currentMockViewKey].name)} (visas nu)</button>
+      <button class="btn" data-action="mock-league-change" value="${otherKey}">Byt till ${escapeHtml(LEAGUES[otherKey].name)} (${otherStatus})</button>
+    </div>
+  `;
+
   const controlsHtml = `
     <div class="rounds-control" style="margin-bottom:14px;">
       ${md.paused ? `<button class="btn" data-action="mock-resume">▶ Fortsätt</button>` : `<button class="btn" data-action="mock-pause">⏸ Pausa</button>`}
@@ -2428,6 +2468,7 @@ function renderMockPage(){
     <div class="myteam-hero">
       <div class="myteam-league-name">Mock Draft · ${escapeHtml(LEAGUES[md.leagueKey] ? LEAGUES[md.leagueKey].name : '')} · ADP: ${md.adpSource === 'AVERAGE' ? 'Genomsnitt' : escapeHtml(md.adpSource)}</div>
       <h2 class="myteam-team-name">${escapeHtml(teamName(md.myIdx))}</h2>
+      ${leagueSwitcherHtml}
       ${controlsHtml}
       ${statusHtml}
       <div class="lineup-slot-label" style="margin:16px 0 8px;">DITT ROSTER</div>
@@ -3217,9 +3258,9 @@ function renderRankingPage(cat){
   const takenDouche = new Set(Object.values(state.douche.picks).filter(Boolean));
   const activeKey = LEAGUES[lastLeagueViewed] ? lastLeagueViewed : 'balla';
   const takenActive = new Set(activeKey === 'balla' ? takenBalla : takenDouche);
-  loadMockDraft();
-  if(mockDraft && mockDraft.started){
-    Object.values(mockDraft.picks).filter(Boolean).forEach(label => takenActive.add(label));
+  const mockForThisLeague = getMockDraftForLeague(activeKey);
+  if(mockForThisLeague && mockForThisLeague.started){
+    Object.values(mockForThisLeague.picks).filter(Boolean).forEach(label => takenActive.add(label));
   }
 
   function headerCell(colKey, text){
@@ -4083,6 +4124,9 @@ document.addEventListener('click', (e) => {
   const mockStopBtn = e.target.closest('[data-action="mock-stop"]');
   if(mockStopBtn){ mockStop(); return; }
 
+  const mockLeagueChangeBtn = e.target.closest('button[data-action="mock-league-change"]');
+  if(mockLeagueChangeBtn){ switchMockView(mockLeagueChangeBtn.value); return; }
+
   const mockSuggestRow = e.target.closest('[data-mock-label], [data-mock-freetext]');
   if(mockSuggestRow){
     const label = mockSuggestRow.dataset.mockFreetext || mockSuggestRow.dataset.mockLabel;
@@ -4350,7 +4394,7 @@ document.addEventListener('change', (e) => {
   if(waiverPosSelect){ waiverPosFilter[waiverPosSelect.dataset.league] = waiverPosSelect.value; renderWeeklyPage(); return; }
 
   const mockLeagueSelect = e.target.closest('[data-action="mock-league-change"]');
-  if(mockLeagueSelect){ mockSetupLeagueKey = mockLeagueSelect.value; renderMockPage(); return; }
+  if(mockLeagueSelect){ switchMockView(mockLeagueSelect.value); return; }
 
   const posFilterCheck = e.target.closest('[data-action="toggle-all-pos"]');
   if(posFilterCheck){
