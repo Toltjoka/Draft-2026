@@ -3216,7 +3216,11 @@ function renderRankingPage(cat){
   const takenBalla = new Set(Object.values(state.balla.picks).filter(Boolean));
   const takenDouche = new Set(Object.values(state.douche.picks).filter(Boolean));
   const activeKey = LEAGUES[lastLeagueViewed] ? lastLeagueViewed : 'balla';
-  const takenActive = activeKey === 'balla' ? takenBalla : takenDouche;
+  const takenActive = new Set(activeKey === 'balla' ? takenBalla : takenDouche);
+  loadMockDraft();
+  if(mockDraft && mockDraft.started){
+    Object.values(mockDraft.picks).filter(Boolean).forEach(label => takenActive.add(label));
+  }
 
   function headerCell(colKey, text){
     const isActive = sortState.col === colKey;
