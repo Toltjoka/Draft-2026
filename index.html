@@ -2022,7 +2022,10 @@ function saveMockDraft(){
 }
 
 function mockOrder(round, idx, n){
-  // Ren snake: udda rundor 1->n, jamna rundor n->1
+  if(mockDraft && mockDraft.leagueKey && LEAGUES[mockDraft.leagueKey]){
+    return LEAGUES[mockDraft.leagueKey].order(round, idx, n);
+  }
+  // Fallback: ren snake
   return (round % 2 === 1) ? idx + 1 : n - idx;
 }
 
@@ -2124,19 +2127,22 @@ function mockRunAutoUntilMyTurn(){
 }
 
 function mockStart(){
-  const teamsSel = document.getElementById('mock-teams-select');
+  const leagueSel = document.getElementById('mock-league-select');
   const myPosSel = document.getElementById('mock-mypos-select');
   const adpSel = document.getElementById('mock-adp-select');
   const roundsInput = document.getElementById('mock-rounds-input');
-  const teams = teamsSel ? parseInt(teamsSel.value,10) : 12;
-  const myIdx = myPosSel ? parseInt(myPosSel.value,10) - 1 : 0;
+  const leagueKey = leagueSel ? leagueSel.value : 'douche';
+  const cfg = LEAGUES[leagueKey];
+  const leagueData = state[leagueKey];
+  const teamNames = (leagueData && leagueData.slots && leagueData.slots.length) ? leagueData.slots.slice() : (cfg.defaultSlotNames || Array.from({length:cfg.n},(_,i)=>'Lag '+(i+1)));
+  const myIdx = myPosSel ? parseInt(myPosSel.value,10) : 0;
   const adpSource = adpSel ? adpSel.value : 'AVERAGE';
-  const rounds = roundsInput ? parseInt(roundsInput.value,10) : 15;
+  const rounds = roundsInput ? parseInt(roundsInput.value,10) : (leagueData && leagueData.rounds ? leagueData.rounds : cfg.defaultRounds);
 
   mockDraft = {
     setup: true, started: true, paused: false,
-    teams, myIdx, rounds, adpSource,
-    rosterSlots: defaultRosterSlots(),
+    leagueKey, teams: cfg.n, teamNames, myIdx, rounds, adpSource,
+    rosterSlots: (leagueData && leagueData.rosterSlots && leagueData.rosterSlots.length) ? leagueData.rosterSlots : defaultRosterSlots(),
     picks: {}
   };
   saveMockDraft();
@@ -2177,6 +2183,8 @@ function mockPickPlayer(label){
   renderMockPage();
 }
 
+let mockSetupLeagueKey = 'douche';
+
 function renderMockPage(){
   const el = document.getElementById('page-MOCK');
   if(!el) return;
@@ -2186,21 +2194,28 @@ function renderMockPage(){
   if(!md.started){
     const adpOptionsHtml = ['<option value="AVERAGE">Genomsnitt (alla källor)</option>']
       .concat(ADP_SOURCES_LIST.map(s => `<option value="${escapeAttr(s)}">${escapeHtml(s)}</option>`)).join('');
+
+    const cfg = LEAGUES[mockSetupLeagueKey];
+    const leagueData = state[mockSetupLeagueKey];
+    const teamNames = (leagueData && leagueData.slots && leagueData.slots.length) ? leagueData.slots : (cfg.defaultSlotNames || Array.from({length:cfg.n},(_,i)=>'Lag '+(i+1)));
+    const defaultMyIdx = (leagueData && leagueData.myTeamIdx !== null && leagueData.myTeamIdx !== undefined) ? leagueData.myTeamIdx : 0;
+    const defaultRoundsVal = (leagueData && leagueData.rounds) ? leagueData.rounds : cfg.defaultRounds;
+    const myPosOptionsHtml = teamNames.map((name,i) => `<option value="${i}" ${i===defaultMyIdx?'selected':''}>${escapeHtml(name)}</option>`).join('');
+
     el.innerHTML = `
       <div class="card">
         <h2>🎯 Mock Draft</h2>
-        <p class="desc">Träna på att drafta! Fungerar precis som riktiga draften, men alla andra lag auto-draftar direkt baserat på ADP och vilka positioner de behöver fylla — bara du väljer själv. Ingen inloggning behövs.</p>
+        <p class="desc">Träna på att drafta! Fungerar precis som riktiga draften — med era riktiga lagnamn, draftordning och rosterregler — men alla andra lag auto-draftar direkt baserat på ADP och vilka positioner de behöver fylla. Bara du väljer själv. Ingen inloggning behövs.</p>
         <div class="rounds-control" style="margin-bottom:10px;">
-          Antal lag:
-          <select id="mock-teams-select">
-            ${[8,10,12,14].map(n => `<option value="${n}" ${n===12?'selected':''}>${n}</option>`).join('')}
+          Vilken liga vill du träna för?
+          <select id="mock-league-select" data-action="mock-league-change">
+            <option value="douche" ${mockSetupLeagueKey==='douche'?'selected':''}>${escapeHtml(LEAGUES.douche.name)}</option>
+            <option value="balla" ${mockSetupLeagueKey==='balla'?'selected':''}>${escapeHtml(LEAGUES.balla.name)}</option>
           </select>
         </div>
         <div class="rounds-control" style="margin-bottom:10px;">
-          Min draftposition:
-          <select id="mock-mypos-select">
-            ${Array.from({length:14},(_,i)=>i+1).map(n => `<option value="${n}" ${n===1?'selected':''}>${n}</option>`).join('')}
-          </select>
+          Vilket lag är du?
+          <select id="mock-mypos-select">${myPosOptionsHtml}</select>
         </div>
         <div class="rounds-control" style="margin-bottom:10px;">
           Draftordning efter ADP-källa:
@@ -2208,7 +2223,7 @@ function renderMockPage(){
         </div>
         <div class="rounds-control" style="margin-bottom:14px;">
           Antal rundor:
-          <input type="number" id="mock-rounds-input" min="9" max="20" value="15" style="max-width:80px;" />
+          <input type="number" id="mock-rounds-input" min="9" max="20" value="${defaultRoundsVal}" style="max-width:80px;" />
         </div>
         <button class="btn" style="font-size:16px; padding:12px 28px;" data-action="mock-start">🚀 Starta mock draft</button>
       </div>
@@ -2219,6 +2234,7 @@ function renderMockPage(){
   const currentKey = mockFindCurrentPickKey();
   const isDone = !currentKey;
   const myTurn = !isDone && !md.paused && mockIsMyPick(currentKey);
+  const teamName = (idx) => (md.teamNames && md.teamNames[idx]) || ('Lag ' + (idx+1));
 
   const controlsHtml = `
     <div class="rounds-control" style="margin-bottom:14px;">
@@ -2258,15 +2274,15 @@ function renderMockPage(){
   recentPicks.reverse();
   const recentHtml = recentPicks.slice(0,20).map(p => `
     <div class="lineup-slot" style="padding:6px 10px;">
-      <div class="lineup-slot-sub">R${p.round} · ${p.teamIdx === md.myIdx ? 'DU' : 'Lag ' + (p.teamIdx+1)}</div>
+      <div class="lineup-slot-sub">R${p.round} · ${p.teamIdx === md.myIdx ? 'DU' : escapeHtml(teamName(p.teamIdx))}</div>
       <div class="lineup-slot-player" style="font-size:13px;">${escapeHtml(p.label)}</div>
     </div>
   `).join('') || '<p class="desc">Inga val gjorda än.</p>';
 
   el.innerHTML = `
     <div class="myteam-hero">
-      <div class="myteam-league-name">Mock Draft · ${md.teams} lag · ADP: ${md.adpSource === 'AVERAGE' ? 'Genomsnitt' : escapeHtml(md.adpSource)}</div>
-      <h2 class="myteam-team-name">Ditt lag (position ${md.myIdx+1})</h2>
+      <div class="myteam-league-name">Mock Draft · ${escapeHtml(LEAGUES[md.leagueKey] ? LEAGUES[md.leagueKey].name : '')} · ADP: ${md.adpSource === 'AVERAGE' ? 'Genomsnitt' : escapeHtml(md.adpSource)}</div>
+      <h2 class="myteam-team-name">${escapeHtml(teamName(md.myIdx))}</h2>
       ${controlsHtml}
       ${statusHtml}
       <div class="lineup-slot-label" style="margin:16px 0 8px;">DITT ROSTER</div>
@@ -4159,6 +4175,9 @@ document.addEventListener('change', (e) => {
 
   const waiverPosSelect = e.target.closest('[data-action="waiver-pos-filter"]');
   if(waiverPosSelect){ waiverPosFilter[waiverPosSelect.dataset.league] = waiverPosSelect.value; renderWeeklyPage(); return; }
+
+  const mockLeagueSelect = e.target.closest('[data-action="mock-league-change"]');
+  if(mockLeagueSelect){ mockSetupLeagueKey = mockLeagueSelect.value; renderMockPage(); return; }
 
   const posFilterCheck = e.target.closest('[data-action="toggle-all-pos"]');
   if(posFilterCheck){
