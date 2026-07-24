@@ -725,6 +725,7 @@
       <button class="nav-btn" data-action="switch-page" data-page="RULES">Regler</button>
       <button class="nav-btn" id="nav-legacy2025" data-action="switch-page" data-page="LEGACY2025">2025</button>
       <button class="nav-btn admin-only-view" data-action="switch-page" data-page="WEEKLY">🏈 Start of the Week</button>
+      <button class="nav-btn" data-action="switch-page" data-page="MOCK">🎯 Mock Draft</button>
     </div>
   </div>
 
@@ -743,6 +744,7 @@
   <section class="page" data-page="RULES" id="page-RULES"></section>
   <section class="page" data-page="LEGACY2025" id="page-LEGACY2025"></section>
   <section class="page admin-only-view" data-page="WEEKLY" id="page-WEEKLY"></section>
+  <section class="page" data-page="MOCK" id="page-MOCK"></section>
   <datalist id="all-players-datalist"></datalist>
   <audio id="custom-sound-player" preload="auto"></audio>
   <audio id="custom-sound-player-2" preload="auto"></audio>
@@ -2003,6 +2005,278 @@ async function importRosterFromScreenshots(key){
 }
 
 // ---- Skarmdumpsimport: las av rosterbilder med bildigenkanning istallet for att klistra in text ----
+// ---- Mock Draft: traningsdraft, ingen admin behovs, auto-draftar alla utom mig ----
+let mockDraft = null; // laddas fran localStorage vid behov
+
+function loadMockDraft(){
+  if(mockDraft !== null) return mockDraft;
+  try{
+    const saved = localStorage.getItem('draft:mockDraft');
+    mockDraft = saved ? JSON.parse(saved) : { setup: false, started: false, paused: false };
+  }catch(e){ mockDraft = { setup: false, started: false, paused: false }; }
+  return mockDraft;
+}
+
+function saveMockDraft(){
+  try{ localStorage.setItem('draft:mockDraft', JSON.stringify(mockDraft)); }catch(e){ /* ignore */ }
+}
+
+function mockOrder(round, idx, n){
+  // Ren snake: udda rundor 1->n, jamna rundor n->1
+  return (round % 2 === 1) ? idx + 1 : n - idx;
+}
+
+function mockFindCurrentPickKey(){
+  const md = mockDraft;
+  for(let r = 1; r <= md.rounds; r++){
+    for(let i = 0; i < md.teams; i++){
+      const key = r + '-' + i;
+      if(!md.picks[key]) return key;
+    }
+  }
+  return null;
+}
+
+function mockIsMyPick(pickKey){
+  const md = mockDraft;
+  const [rStr, iStr] = pickKey.split('-');
+  const round = parseInt(rStr,10), i = parseInt(iStr,10);
+  const slotIdx = mockOrder(round, i, md.teams) - 1;
+  return slotIdx === md.myIdx;
+}
+
+function mockTeamRosterLabels(teamIdx){
+  const md = mockDraft;
+  const labels = [];
+  for(let r = 1; r <= md.rounds; r++){
+    for(let i = 0; i < md.teams; i++){
+      if(mockOrder(r, i, md.teams) - 1 === teamIdx){
+        const key = r + '-' + i;
+        if(md.picks[key]) labels.push(md.picks[key]);
+      }
+    }
+  }
+  return labels;
+}
+
+function mockGetNeededPositions(teamIdx){
+  const md = mockDraft;
+  const labels = mockTeamRosterLabels(teamIdx);
+  const roster = labels.map(label => ({ label, parsed: parsePlayerLabel(label) }));
+  const template = md.rosterSlots.map(t => ({ ...t, filled:false }));
+  const used = new Set();
+  const order = template.map((t,idx)=>idx).sort((a,b)=> template[a].pos.length - template[b].pos.length);
+  order.forEach(idx => {
+    const slot = template[idx];
+    const cand = roster.find(p => slot.pos.includes(p.parsed.pos) && !used.has(p));
+    if(cand){ slot.filled = true; used.add(cand); }
+  });
+  const needed = new Set();
+  template.forEach(s => { if(!s.filled) s.pos.forEach(pp => needed.add(pp)); });
+  return needed;
+}
+
+function mockGetAdpValue(player, source){
+  if(source === 'AVERAGE'){
+    const v = parseFloat(player.adp);
+    return isNaN(v) ? Infinity : v;
+  }
+  const adpData = findAdpSources(player);
+  if(!adpData || !adpData.sources) return Infinity;
+  const v = adpData.sources[source];
+  return (v === null || v === undefined || v === '') ? Infinity : v;
+}
+
+function mockBestAvailablePlayer(teamIdx){
+  const md = mockDraft;
+  const taken = new Set(Object.values(md.picks).filter(Boolean));
+  const needed = mockGetNeededPositions(teamIdx);
+  const available = PLAYERS.filter(p => !taken.has(formatPlayerLabel(p)));
+
+  // Forsok forst hitta basta spelare som fyller ett behov, annars bara basta tillgangliga
+  let pool = needed.size ? available.filter(p => needed.has(p.pos)) : available;
+  if(!pool.length) pool = available;
+  if(!pool.length) return null;
+
+  pool.sort((a,b) => mockGetAdpValue(a, md.adpSource) - mockGetAdpValue(b, md.adpSource));
+  return pool[0];
+}
+
+function mockAutoPickOne(){
+  const md = mockDraft;
+  const key = mockFindCurrentPickKey();
+  if(!key) return false; // klart
+  if(mockIsMyPick(key)) return false; // min tur - stanna
+
+  const [rStr, iStr] = key.split('-');
+  const teamIdx = mockOrder(parseInt(rStr,10), parseInt(iStr,10), md.teams) - 1;
+  const best = mockBestAvailablePlayer(teamIdx);
+  if(!best) return false;
+  md.picks[key] = formatPlayerLabel(best);
+  return true;
+}
+
+function mockRunAutoUntilMyTurn(){
+  const md = mockDraft;
+  let guard = 0;
+  while(md.started && !md.paused && mockAutoPickOne() && guard < 5000) guard++;
+  saveMockDraft();
+}
+
+function mockStart(){
+  const teamsSel = document.getElementById('mock-teams-select');
+  const myPosSel = document.getElementById('mock-mypos-select');
+  const adpSel = document.getElementById('mock-adp-select');
+  const roundsInput = document.getElementById('mock-rounds-input');
+  const teams = teamsSel ? parseInt(teamsSel.value,10) : 12;
+  const myIdx = myPosSel ? parseInt(myPosSel.value,10) - 1 : 0;
+  const adpSource = adpSel ? adpSel.value : 'AVERAGE';
+  const rounds = roundsInput ? parseInt(roundsInput.value,10) : 15;
+
+  mockDraft = {
+    setup: true, started: true, paused: false,
+    teams, myIdx, rounds, adpSource,
+    rosterSlots: defaultRosterSlots(),
+    picks: {}
+  };
+  saveMockDraft();
+  mockRunAutoUntilMyTurn();
+  renderMockPage();
+}
+
+function mockPause(){
+  if(!mockDraft) return;
+  mockDraft.paused = true;
+  saveMockDraft();
+  renderMockPage();
+}
+
+function mockResume(){
+  if(!mockDraft) return;
+  mockDraft.paused = false;
+  saveMockDraft();
+  mockRunAutoUntilMyTurn();
+  renderMockPage();
+}
+
+function mockStop(){
+  if(!confirm('Avsluta mockdraften och nollställ? Går inte att ångra.')) return;
+  mockDraft = { setup: false, started: false, paused: false };
+  saveMockDraft();
+  renderMockPage();
+}
+
+function mockPickPlayer(label){
+  loadMockDraft();
+  if(!mockDraft || !mockDraft.started || mockDraft.paused) return;
+  const key = mockFindCurrentPickKey();
+  if(!key || !mockIsMyPick(key)) return;
+  mockDraft.picks[key] = label;
+  saveMockDraft();
+  mockRunAutoUntilMyTurn();
+  renderMockPage();
+}
+
+function renderMockPage(){
+  const el = document.getElementById('page-MOCK');
+  if(!el) return;
+  loadMockDraft();
+  const md = mockDraft;
+
+  if(!md.started){
+    const adpOptionsHtml = ['<option value="AVERAGE">Genomsnitt (alla källor)</option>']
+      .concat(ADP_SOURCES_LIST.map(s => `<option value="${escapeAttr(s)}">${escapeHtml(s)}</option>`)).join('');
+    el.innerHTML = `
+      <div class="card">
+        <h2>🎯 Mock Draft</h2>
+        <p class="desc">Träna på att drafta! Fungerar precis som riktiga draften, men alla andra lag auto-draftar direkt baserat på ADP och vilka positioner de behöver fylla — bara du väljer själv. Ingen inloggning behövs.</p>
+        <div class="rounds-control" style="margin-bottom:10px;">
+          Antal lag:
+          <select id="mock-teams-select">
+            ${[8,10,12,14].map(n => `<option value="${n}" ${n===12?'selected':''}>${n}</option>`).join('')}
+          </select>
+        </div>
+        <div class="rounds-control" style="margin-bottom:10px;">
+          Min draftposition:
+          <select id="mock-mypos-select">
+            ${Array.from({length:14},(_,i)=>i+1).map(n => `<option value="${n}" ${n===1?'selected':''}>${n}</option>`).join('')}
+          </select>
+        </div>
+        <div class="rounds-control" style="margin-bottom:10px;">
+          Draftordning efter ADP-källa:
+          <select id="mock-adp-select">${adpOptionsHtml}</select>
+        </div>
+        <div class="rounds-control" style="margin-bottom:14px;">
+          Antal rundor:
+          <input type="number" id="mock-rounds-input" min="9" max="20" value="15" style="max-width:80px;" />
+        </div>
+        <button class="btn" style="font-size:16px; padding:12px 28px;" data-action="mock-start">🚀 Starta mock draft</button>
+      </div>
+    `;
+    return;
+  }
+
+  const currentKey = mockFindCurrentPickKey();
+  const isDone = !currentKey;
+  const myTurn = !isDone && !md.paused && mockIsMyPick(currentKey);
+
+  const controlsHtml = `
+    <div class="rounds-control" style="margin-bottom:14px;">
+      ${md.paused ? `<button class="btn" data-action="mock-resume">▶ Fortsätt</button>` : `<button class="btn" data-action="mock-pause">⏸ Pausa</button>`}
+      <button class="btn" data-action="mock-stop">⏹ Avsluta & nollställ</button>
+    </div>
+  `;
+
+  const myLabels = mockTeamRosterLabels(md.myIdx);
+  const myRosterHtml = myLabels.length ? myLabels.map(l => `<span class="bench-chip">${escapeHtml(l)}</span>`).join('') : '<span class="no-identity">Inga val än.</span>';
+
+  let statusHtml;
+  if(isDone){
+    statusHtml = `<div class="lineup-slot filled"><div class="lineup-slot-label">KLART</div><div class="lineup-slot-player">Mock-draften är färdig — ${md.rounds} rundor, ${md.teams} lag.</div></div>`;
+  } else if(md.paused){
+    statusHtml = `<div class="lineup-slot"><div class="lineup-slot-label">PAUSAD</div><div class="lineup-slot-player">Tryck "Fortsätt" för att köra vidare.</div></div>`;
+  } else if(myTurn){
+    const [rStr, iStr] = currentKey.split('-');
+    const overallPick = (parseInt(rStr,10)-1) * md.teams + parseInt(iStr,10) + 1;
+    statusHtml = `
+      <div class="lineup-slot filled">
+        <div class="lineup-slot-label">DIN TUR — RUNDA ${rStr} · PICK #${overallPick}</div>
+        <input type="text" class="player-search" autocomplete="off" data-action="mock-player-search" placeholder="Sök spelare…" style="min-width:220px; margin-top:6px;" />
+      </div>
+    `;
+  } else {
+    statusHtml = `<div class="lineup-slot"><div class="lineup-slot-label">DRAFTAR…</div></div>`;
+  }
+
+  const recentPicks = [];
+  for(let r = 1; r <= md.rounds && recentPicks.length < 15; r++){
+    for(let i = 0; i < md.teams; i++){
+      const key = r + '-' + i;
+      if(md.picks[key]) recentPicks.push({ round:r, teamIdx: mockOrder(r,i,md.teams)-1, label: md.picks[key] });
+    }
+  }
+  recentPicks.reverse();
+  const recentHtml = recentPicks.slice(0,20).map(p => `
+    <div class="lineup-slot" style="padding:6px 10px;">
+      <div class="lineup-slot-sub">R${p.round} · ${p.teamIdx === md.myIdx ? 'DU' : 'Lag ' + (p.teamIdx+1)}</div>
+      <div class="lineup-slot-player" style="font-size:13px;">${escapeHtml(p.label)}</div>
+    </div>
+  `).join('') || '<p class="desc">Inga val gjorda än.</p>';
+
+  el.innerHTML = `
+    <div class="myteam-hero">
+      <div class="myteam-league-name">Mock Draft · ${md.teams} lag · ADP: ${md.adpSource === 'AVERAGE' ? 'Genomsnitt' : escapeHtml(md.adpSource)}</div>
+      <h2 class="myteam-team-name">Ditt lag (position ${md.myIdx+1})</h2>
+      ${controlsHtml}
+      ${statusHtml}
+      <div class="lineup-slot-label" style="margin:16px 0 8px;">DITT ROSTER</div>
+      <div class="bench-list">${myRosterHtml}</div>
+      <div class="lineup-slot-label" style="margin:16px 0 8px;">SENASTE VALEN</div>
+      <div class="lineup-grid">${recentHtml}</div>
+    </div>
+  `;
+}
+
 function renderWeeklyPage(){
   const el = document.getElementById('page-WEEKLY');
   if(!el) return;
@@ -2496,6 +2770,7 @@ function switchPage(page){
   if(page === 'RULES') renderRulesPage();
   if(page === 'LEGACY2025') renderLegacyPage();
   if(page === 'WEEKLY') { renderWeeklyPage(); autoLoadSleeperHubs(); }
+  if(page === 'MOCK') renderMockPage();
   if(page === 'balla' || page === 'douche') scrollToCurrentPick(page);
 }
 
@@ -3390,6 +3665,34 @@ function hideSuggestions(){
   document.getElementById('global-suggest').style.display = 'none';
 }
 
+function showMockSuggestions(input){
+  const box = document.getElementById('global-suggest');
+  const rawQuery = input.value.trim();
+  const query = rawQuery.toLowerCase();
+  const taken = new Set(Object.values(mockDraft.picks).filter(Boolean));
+
+  let matches = PLAYERS.filter(p => !taken.has(formatPlayerLabel(p)));
+  if(query) matches = matches.filter(p => (p.full || p.name).toLowerCase().includes(query) || p.team.toLowerCase().includes(query));
+  matches = matches.slice(0, 8);
+
+  const freeTextRow = rawQuery.length >= 2 ? `
+    <div class="suggest-row suggest-freetext" data-mock-freetext="${escapeAttr(rawQuery)}">
+      <span>✏️ Lägg till <strong>"${escapeHtml(rawQuery)}"</strong> som fritext</span>
+      <span class="suggest-meta">Finns inte i listan</span>
+    </div>
+  ` : '';
+
+  box.innerHTML = (matches.length ? matches.map(p => `
+    <div class="suggest-row ${posClass(p.pos)}" data-mock-label="${escapeAttr(formatPlayerLabel(p))}">
+      <span><span class="pos-badge ${posClass(p.pos)}">${escapeHtml(p.pos)}</span> ${escapeHtml(p.full || p.name)}${p.rookie?' <span class="rookie-badge">R</span>':''}</span>
+      <span class="suggest-meta">${p.rank} · ${p.team} · ADP ${p.adp}</span>
+    </div>
+  `).join('') : (rawQuery.length >= 2 ? '' : `<div class="suggest-empty">Inga träffar</div>`)) + freeTextRow;
+
+  positionSuggestBox(input);
+  box.style.display = 'block';
+}
+
 function showWeeklySuggestions(input){
   const key = input.dataset.league;
   const slotIdx = input.dataset.slot;
@@ -3586,6 +3889,26 @@ document.addEventListener('click', (e) => {
     return;
   }
 
+  const mockStartBtn = e.target.closest('[data-action="mock-start"]');
+  if(mockStartBtn){ mockStart(); return; }
+
+  const mockPauseBtn = e.target.closest('[data-action="mock-pause"]');
+  if(mockPauseBtn){ mockPause(); return; }
+
+  const mockResumeBtn = e.target.closest('[data-action="mock-resume"]');
+  if(mockResumeBtn){ mockResume(); return; }
+
+  const mockStopBtn = e.target.closest('[data-action="mock-stop"]');
+  if(mockStopBtn){ mockStop(); return; }
+
+  const mockSuggestRow = e.target.closest('[data-mock-label], [data-mock-freetext]');
+  if(mockSuggestRow){
+    const label = mockSuggestRow.dataset.mockFreetext || mockSuggestRow.dataset.mockLabel;
+    mockPickPlayer(label);
+    hideSuggestions();
+    return;
+  }
+
   const addWeeklyPlayerBtn = e.target.closest('[data-action="add-weekly-player"]');
   if(addWeeklyPlayerBtn){
     const slotVal = addWeeklyPlayerBtn.dataset.slot;
@@ -3708,7 +4031,7 @@ document.addEventListener('click', (e) => {
     cell.classList.add('current');
   }
 
-  if(!e.target.closest('#global-suggest') && !e.target.closest('[data-action="open-weekly-swap-menu"]') && !e.target.closest('[data-action="player-search"]') && !e.target.closest('[data-action="weekly-player-search"]')){
+  if(!e.target.closest('#global-suggest') && !e.target.closest('[data-action="open-weekly-swap-menu"]') && !e.target.closest('[data-action="player-search"]') && !e.target.closest('[data-action="weekly-player-search"]') && !e.target.closest('[data-action="mock-player-search"]')){
     hideSuggestions();
   }
 });
@@ -3748,6 +4071,20 @@ document.addEventListener('keydown', (e) => {
     hideSuggestions();
     e.target.blur();
   }
+
+  if(e.key === 'Enter' && e.target && e.target.closest && e.target.closest('[data-action="mock-player-search"]')){
+    e.preventDefault();
+    const box = document.getElementById('global-suggest');
+    const firstMockMatch = box.querySelector('.suggest-row[data-mock-label]:not(.suggest-freetext)');
+    const freeTextMockRow = box.querySelector('.suggest-row.suggest-freetext[data-mock-freetext]');
+    if(firstMockMatch){
+      mockPickPlayer(firstMockMatch.dataset.mockLabel);
+    } else if(freeTextMockRow){
+      mockPickPlayer(freeTextMockRow.dataset.mockFreetext);
+    }
+    hideSuggestions();
+    e.target.blur();
+  }
 });
 
 document.addEventListener('mousedown', (e) => {
@@ -3767,6 +4104,8 @@ document.addEventListener('focusin', (e) => {
   }
   const weeklyInput = e.target.closest('[data-action="weekly-player-search"]');
   if(weeklyInput){ showWeeklySuggestions(weeklyInput); }
+  const mockInput = e.target.closest('[data-action="mock-player-search"]');
+  if(mockInput){ showMockSuggestions(mockInput); }
 });
 
 document.addEventListener('focusout', (e) => {
@@ -3789,6 +4128,15 @@ document.addEventListener('focusout', (e) => {
       }
     }, 150);
   }
+  const mockInput = e.target.closest('[data-action="mock-player-search"]');
+  if(mockInput){
+    setTimeout(() => {
+      if(!suggestBoxMouseDown){
+        hideSuggestions();
+        mockInput.value = '';
+      }
+    }, 150);
+  }
 });
 
 document.addEventListener('input', (e) => {
@@ -3797,6 +4145,9 @@ document.addEventListener('input', (e) => {
 
   const weeklySearchInput = e.target.closest('[data-action="weekly-player-search"]');
   if(weeklySearchInput){ showWeeklySuggestions(weeklySearchInput); return; }
+
+  const mockSearchInput = e.target.closest('[data-action="mock-player-search"]');
+  if(mockSearchInput){ showMockSuggestions(mockSearchInput); return; }
 
   const rankInput = e.target.closest('[data-action="rank-search"]');
   if(rankInput){ rankSearch[rankInput.dataset.cat] = rankInput.value; renderRankingPage(rankInput.dataset.cat); return; }
