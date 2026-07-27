@@ -3295,10 +3295,30 @@ async function showPlayerInfoPopup(label){
 
   const stats = find2025Stats(p);
 
+  let depthChartListHtml = '';
+  if(sleeperInfo && sleeperInfo.depth_chart_position){
+    try{
+      const playersMap = await sleeperFetchPlayersMap();
+      const teammates = Object.values(playersMap).filter(sp =>
+        sp && sp.team === currentTeam && sp.depth_chart_position === sleeperInfo.depth_chart_position && sp.depth_chart_order
+      ).sort((a,b) => a.depth_chart_order - b.depth_chart_order);
+      if(teammates.length){
+        depthChartListHtml = teammates.map(sp => {
+          const isMe = sp === sleeperInfo || (sp.first_name === sleeperInfo.first_name && sp.last_name === sleeperInfo.last_name);
+          const fullName = (sp.first_name ? sp.first_name + ' ' : '') + sp.last_name;
+          return `<div class="turn-popup-needs" style="${isMe ? 'font-weight:700; color:var(--silver);' : ''}">${sleeperInfo.depth_chart_position}${sp.depth_chart_order}: ${escapeHtml(fullName)}${isMe ? ' (denna)' : ''}</div>`;
+        }).join('');
+      }
+    }catch(e){ /* ignorera - visa bara den korta raden om det failar */ }
+  }
+
   const rowsHtml = [
     sleeperInfo && sleeperInfo.age ? `<div class="turn-popup-needs">Ålder: <strong>${sleeperInfo.age}</strong></div>` : '',
     sleeperInfo && (sleeperInfo.years_exp !== null && sleeperInfo.years_exp !== undefined) ? `<div class="turn-popup-needs">År i ligan: <strong>${sleeperInfo.years_exp === 0 ? 'Rookie' : sleeperInfo.years_exp}</strong></div>` : '',
-    sleeperInfo && sleeperInfo.depth_chart_position ? `<div class="turn-popup-needs">Depth chart: <strong>${escapeHtml(sleeperInfo.depth_chart_position)}${sleeperInfo.depth_chart_order ? ' #' + sleeperInfo.depth_chart_order : ''}</strong></div>` : '',
+    sleeperInfo && sleeperInfo.depth_chart_position ? `<div class="turn-popup-needs">
+        <span data-action="toggle-depth-chart" style="cursor:pointer; text-decoration:underline dotted; text-underline-offset:3px;">Depth chart: <strong>${escapeHtml(sleeperInfo.depth_chart_position)}${sleeperInfo.depth_chart_order ? ' #' + sleeperInfo.depth_chart_order : ''}</strong> ${depthChartListHtml ? '▾ visa alla' : ''}</span>
+        ${depthChartListHtml ? `<div id="depth-chart-detail" style="display:none; margin-top:6px; padding-left:10px; border-left:2px solid var(--line);">${depthChartListHtml}</div>` : ''}
+      </div>` : '',
     teamChanged ? `<div class="turn-popup-needs" style="color:var(--pos-dst);">⚠ Bytte lag sen 2025: ${escapeHtml(legacyTeam)} → ${escapeHtml(currentTeam)}</div>` : '',
   ].filter(Boolean).join('');
 
@@ -4300,6 +4320,13 @@ document.addEventListener('click', (e) => {
   const playerInfoBtn = e.target.closest('[data-action="show-player-info"]');
   if(playerInfoBtn){
     showPlayerInfoPopup(playerInfoBtn.dataset.label);
+    return;
+  }
+
+  const depthChartToggle = e.target.closest('[data-action="toggle-depth-chart"]');
+  if(depthChartToggle){
+    const detail = document.getElementById('depth-chart-detail');
+    if(detail) detail.style.display = detail.style.display === 'none' ? 'block' : 'none';
     return;
   }
 
