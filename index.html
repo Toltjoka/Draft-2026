@@ -914,6 +914,7 @@ let rankingMeta = { updatedAt: null, updatedBy: null };
 
 function storageKey(key){ return 'draft:' + key; }
 function formatPlayerLabel(p){ return `${p.name} (${p.pos}-${p.team})`; }
+function formatFullPlayerLabel(p){ return `${p.full || p.name} (${p.pos}-${p.team})`; }
 
 function normPlayerName(fullName){
   let parts = (fullName||'').trim().split(/\s+/).filter(Boolean);
@@ -2297,7 +2298,7 @@ function mockShowTurnPopup(pickKey){
           <span class="turn-pick-team">${escapeHtml(p.team)}</span>
           ${fillsNeed ? '<span class="turn-pick-need">✓ Fyller behov</span>' : ''}
           <span class="turn-pick-adp">ADP ${escapeHtml(String(adpDisplay))}</span>
-          <button class="btn" style="padding:1px 6px; font-size:10px; margin-left:4px;" data-action="show-player-info" data-label="${escapeAttr(formatPlayerLabel(p))}" title="Spelarinfo">${NEWS_ICON_SVG}</button>
+          <button class="btn" style="padding:1px 6px; font-size:10px; margin-left:4px;" data-action="show-player-info" data-label="${escapeAttr(formatFullPlayerLabel(p))}" title="Spelarinfo">${NEWS_ICON_SVG}</button>
         </div>
         <button class="btn turn-pick-btn" data-action="mock-draft-from-popup" data-label="${escapeAttr(formatPlayerLabel(p))}">Draft</button>
       </div>
@@ -3230,7 +3231,7 @@ function showTurnPopup(key, pickKey){
           <span class="turn-pick-team">${escapeHtml(p.team)}</span>
           ${fillsNeed ? '<span class="turn-pick-need">✓ Fyller behov</span>' : ''}
           <span class="turn-pick-adp">ADP ${escapeHtml(p.adp)}</span>
-          <button class="btn" style="padding:1px 6px; font-size:10px; margin-left:4px;" data-action="show-player-info" data-label="${escapeAttr(formatPlayerLabel(p))}" title="Spelarinfo">${NEWS_ICON_SVG}</button>
+          <button class="btn" style="padding:1px 6px; font-size:10px; margin-left:4px;" data-action="show-player-info" data-label="${escapeAttr(formatFullPlayerLabel(p))}" title="Spelarinfo">${NEWS_ICON_SVG}</button>
         </div>
         <button class="btn turn-pick-btn" data-action="draft-from-popup" data-league="${key}" data-pick-key="${pickKey}" data-label="${escapeAttr(formatPlayerLabel(p))}">Draft</button>
       </div>
@@ -3253,30 +3254,62 @@ function hideTurnPopup(){
 }
 
 // ---- Spelarinfo-popup: alder, ar i ligan, depth chart (Sleeper, gratis) + forra arets stats (redan i appen) ----
-let sleeperNameIndex = null;
+let sleeperNameIndex = null; // exakt fullt namn (lowercase) + pos -> spelare
+let sleeperNormFallback = null; // forkortad normalisering (initial+efternamn) - bara otvetydiga
 function buildSleeperNameIndex(playersMap){
   sleeperNameIndex = new Map();
+  const normCounts = new Map();
+  const fallback = new Map();
   Object.values(playersMap).forEach(sp => {
     if(!sp || !sp.position || !sp.last_name) return;
     const pos = sp.position === 'DEF' ? 'DST' : sp.position;
     const full = (sp.first_name ? sp.first_name + ' ' : '') + sp.last_name;
-    const norm = normPlayerName(full);
-    const key = pos + '|' + norm;
-    if(!sleeperNameIndex.has(key)) sleeperNameIndex.set(key, sp);
+
+    // Exakt fullt namn - primar nyckel, saker matchning aven vid namnkrock (t.ex. Bijan/Brian Robinson)
+    const exactKey = pos + '|' + full.toLowerCase();
+    sleeperNameIndex.set(exactKey, sp);
+
+    // Forkortad normalisering (forsta bokstav + efternamn) - bara som reserv, och bara om entydig
+    const normKey = pos + '|' + normPlayerName(full);
+    normCounts.set(normKey, (normCounts.get(normKey) || 0) + 1);
+    if(!fallback.has(normKey)) fallback.set(normKey, sp);
   });
+  normCounts.forEach((count, key) => { if(count > 1) fallback.delete(key); });
+  sleeperNormFallback = fallback;
+}
+
+function lookupSleeperPlayer(p){
+  const exactKey = p.pos + '|' + (p.full || p.name).toLowerCase();
+  return sleeperNameIndex.get(exactKey) || sleeperNormFallback.get(p.pos + '|' + normPlayerName(p.name)) || null;
 }
 
 function findLegacy2025Team(p){
+  const fullName = (p.full || p.name).toLowerCase();
+  // Forsok exakt namn forst (undviker krockar som Bijan/Brian Robinson)
   for(const team of LEGACY_2025_ROSTERS){
-    const hit = (team.roster || []).find(lp => lp.pos === p.pos && normPlayerName(lp.name) === normPlayerName(p.name));
+    const hit = (team.roster || []).find(lp => lp.pos === p.pos && lp.name.toLowerCase() === fullName);
     if(hit) return hit.team;
   }
-  return null;
+  // Reserv: forkortad normalisering, men bara om exakt en traff finns totalt
+  const normMatches = [];
+  LEGACY_2025_ROSTERS.forEach(team => {
+    (team.roster || []).forEach(lp => {
+      if(lp.pos === p.pos && normPlayerName(lp.name) === normPlayerName(p.name)) normMatches.push(lp.team);
+    });
+  });
+  return normMatches.length === 1 ? normMatches[0] : null;
 }
 
 async function showPlayerInfoPopup(label){
   const parsed = parsePlayerLabel(label);
-  const p = PLAYERS.find(pl => pl.pos === parsed.pos && normPlayerName(pl.name) === normPlayerName(parsed.name)) || parsed;
+  const exactMatches = PLAYERS.filter(pl => pl.pos === parsed.pos && (pl.full || pl.name).toLowerCase() === parsed.name.toLowerCase());
+  let p;
+  if(exactMatches.length === 1){
+    p = exactMatches[0];
+  } else {
+    const normMatches = PLAYERS.filter(pl => pl.pos === parsed.pos && normPlayerName(pl.name) === normPlayerName(parsed.name));
+    p = normMatches.length === 1 ? normMatches[0] : (exactMatches[0] || parsed);
+  }
 
   const body = document.getElementById('turn-popup-body');
   body.innerHTML = `<p class="turn-popup-sub">Läser spelarinfo…</p>`;
@@ -3286,7 +3319,7 @@ async function showPlayerInfoPopup(label){
   try{
     const playersMap = await sleeperFetchPlayersMap();
     if(!sleeperNameIndex) buildSleeperNameIndex(playersMap);
-    sleeperInfo = sleeperNameIndex.get(p.pos + '|' + normPlayerName(p.name)) || null;
+    sleeperInfo = lookupSleeperPlayer(p);
   }catch(e){ /* Sleeper kan vara otillgangligt - visa resten anda */ }
 
   const legacyTeam = findLegacy2025Team(p);
@@ -3465,7 +3498,7 @@ function renderRankingPage(cat){
         <td class="adp-td-name">
           <span class="pos-badge ${posClass(p.pos)}">${escapeHtml(p.pos)}</span>
           ${escapeHtml(p.name)} <span class="adp-td-team">${escapeHtml(p.team)}</span>${p.rookie?'<span class="rookie-badge">R</span>':''}
-          <button class="btn" style="padding:1px 6px; font-size:10px; margin-left:6px;" data-action="show-player-info" data-label="${escapeAttr(formatPlayerLabel(p))}" title="Spelarinfo">${NEWS_ICON_SVG}</button>
+          <button class="btn" style="padding:1px 6px; font-size:10px; margin-left:6px;" data-action="show-player-info" data-label="${escapeAttr(formatFullPlayerLabel(p))}" title="Spelarinfo">${NEWS_ICON_SVG}</button>
         </td>
         <td class="adp-td">${escapeHtml(p.adp)}</td>
         ${siteCellsHtml}
@@ -4050,7 +4083,7 @@ function showSuggestions(input){
   box.innerHTML = (matches.length ? matches.map(p => `
     <div class="suggest-row ${posClass(p.pos)}" data-league="${key}" data-pick-key="${pickKey}" data-label="${escapeAttr(formatPlayerLabel(p))}">
       <span><span class="pos-badge ${posClass(p.pos)}">${escapeHtml(p.pos)}</span> ${escapeHtml(p.name)}${p.rookie?' <span class="rookie-badge">R</span>':''}
-      <button class="btn" style="padding:0px 5px; font-size:9px; margin-left:4px;" data-action="show-player-info" data-label="${escapeAttr(formatPlayerLabel(p))}" title="Spelarinfo">${NEWS_ICON_SVG}</button></span>
+      <button class="btn" style="padding:0px 5px; font-size:9px; margin-left:4px;" data-action="show-player-info" data-label="${escapeAttr(formatFullPlayerLabel(p))}" title="Spelarinfo">${NEWS_ICON_SVG}</button></span>
       <span class="suggest-meta">${p.rank} · ${p.team} · ADP ${p.adp}</span>
     </div>
   `).join('') : (rawQuery.length >= 2 ? '' : `<div class="suggest-empty">Inga träffar</div>`)) + freeTextRow;
