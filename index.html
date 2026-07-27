@@ -2285,6 +2285,7 @@ function mockShowTurnPopup(pickKey){
           <span class="turn-pick-team">${escapeHtml(p.team)}</span>
           ${fillsNeed ? '<span class="turn-pick-need">✓ Fyller behov</span>' : ''}
           <span class="turn-pick-adp">ADP ${escapeHtml(String(adpDisplay))}</span>
+          <button class="btn" style="padding:1px 6px; font-size:10px; margin-left:4px;" data-action="show-player-info" data-label="${escapeAttr(formatPlayerLabel(p))}" title="Spelarinfo">${NEWS_ICON_SVG}</button>
         </div>
         <button class="btn turn-pick-btn" data-action="mock-draft-from-popup" data-label="${escapeAttr(formatPlayerLabel(p))}">Draft</button>
       </div>
@@ -3217,6 +3218,7 @@ function showTurnPopup(key, pickKey){
           <span class="turn-pick-team">${escapeHtml(p.team)}</span>
           ${fillsNeed ? '<span class="turn-pick-need">✓ Fyller behov</span>' : ''}
           <span class="turn-pick-adp">ADP ${escapeHtml(p.adp)}</span>
+          <button class="btn" style="padding:1px 6px; font-size:10px; margin-left:4px;" data-action="show-player-info" data-label="${escapeAttr(formatPlayerLabel(p))}" title="Spelarinfo">${NEWS_ICON_SVG}</button>
         </div>
         <button class="btn turn-pick-btn" data-action="draft-from-popup" data-league="${key}" data-pick-key="${pickKey}" data-label="${escapeAttr(formatPlayerLabel(p))}">Draft</button>
       </div>
@@ -3291,7 +3293,7 @@ async function showPlayerInfoPopup(label){
   const isPasser = p.pos === 'QB';
   const seasonRows = [2025, 2024, 2023].map(year => {
     const s = findStatsForYear(p, year);
-    if(!s) return `<tr><td class="adp-th-name">${year}</td><td class="adp-th" colspan="6">Ingen data</td></tr>`;
+    if(!s) return `<tr><td class="adp-th-name">${year}</td><td class="adp-th" colspan="7">Ingen data</td></tr>`;
     return `
       <tr>
         <td class="adp-th-name">${year}</td>
@@ -3306,6 +3308,7 @@ async function showPlayerInfoPopup(label){
           <td class="adp-th">${s.ruTD}</td>
           <td class="adp-th">${s.rec}/${s.tgts}</td>
           <td class="adp-th">${s.recYds}</td>
+          <td class="adp-th">${s.recTD}</td>
         `}
         <td class="adp-th">${s.ppr}</td>
       </tr>
@@ -3329,6 +3332,7 @@ async function showPlayerInfoPopup(label){
             <th class="adp-th">Ru TD</th>
             <th class="adp-th">Rec/Tgt</th>
             <th class="adp-th">Rec Yds</th>
+            <th class="adp-th">Rec TD</th>
           `}
           <th class="adp-th">PPR</th>
         </tr>
