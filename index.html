@@ -233,7 +233,7 @@
   .backup-modal-actions{display:flex; align-items:center; gap:10px;}
 
   /* Turn popup */
-  .turn-popup-modal{max-width:480px;}
+  .turn-popup-modal{max-width:480px; overflow-y:auto;}
   .turn-popup-sub{font-family:'IBM Plex Mono',monospace; font-size:12px; color:var(--chalk-dim); margin:0;}
   .turn-popup-needs{font-size:13px; color:var(--silver); margin:0; font-weight:600;}
   .turn-popup-list{display:flex; flex-direction:column; gap:8px; max-height:50vh; overflow-y:auto;}
@@ -3317,7 +3317,8 @@ async function showPlayerInfoPopup(label){
 
   const statsHtml = `
     <div class="lineup-slot-label" style="margin:14px 0 8px;">SENASTE 3 SÄSONGERNA</div>
-    <table class="adp-compare-table" style="width:100%;">
+    <div style="overflow-x:auto; max-width:100%; border-radius:8px; border:1px solid var(--line);">
+    <table class="adp-compare-table" style="width:100%; white-space:nowrap;">
       <thead>
         <tr>
           <th class="adp-th-name">År</th>
@@ -3339,6 +3340,7 @@ async function showPlayerInfoPopup(label){
       </thead>
       <tbody>${seasonRows}</tbody>
     </table>
+    </div>
     ${stats ? `<p class="desc" style="margin-top:8px;">2025: ${stats.snapPct} snaps</p>` : ''}
   `;
 
