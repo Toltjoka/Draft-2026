@@ -3213,6 +3213,74 @@ function hideTurnPopup(){
   document.getElementById('turn-popup-overlay').classList.remove('show');
 }
 
+// ---- Spelarinfo-popup: alder, ar i ligan, depth chart (Sleeper, gratis) + forra arets stats (redan i appen) ----
+let sleeperNameIndex = null;
+function buildSleeperNameIndex(playersMap){
+  sleeperNameIndex = new Map();
+  Object.values(playersMap).forEach(sp => {
+    if(!sp || !sp.position || !sp.last_name) return;
+    const pos = sp.position === 'DEF' ? 'DST' : sp.position;
+    const full = (sp.first_name ? sp.first_name + ' ' : '') + sp.last_name;
+    const norm = normPlayerName(full);
+    const key = pos + '|' + norm;
+    if(!sleeperNameIndex.has(key)) sleeperNameIndex.set(key, sp);
+  });
+}
+
+function findLegacy2025Team(p){
+  for(const team of LEGACY_2025_ROSTERS){
+    const hit = (team.roster || []).find(lp => lp.pos === p.pos && normPlayerName(lp.name) === normPlayerName(p.name));
+    if(hit) return hit.team;
+  }
+  return null;
+}
+
+async function showPlayerInfoPopup(label){
+  const parsed = parsePlayerLabel(label);
+  const p = PLAYERS.find(pl => pl.pos === parsed.pos && normPlayerName(pl.name) === normPlayerName(parsed.name)) || parsed;
+
+  const body = document.getElementById('turn-popup-body');
+  body.innerHTML = `<p class="turn-popup-sub">Läser spelarinfo…</p>`;
+  document.getElementById('turn-popup-overlay').classList.add('show');
+
+  let sleeperInfo = null;
+  try{
+    const playersMap = await sleeperFetchPlayersMap();
+    if(!sleeperNameIndex) buildSleeperNameIndex(playersMap);
+    sleeperInfo = sleeperNameIndex.get(p.pos + '|' + normPlayerName(p.name)) || null;
+  }catch(e){ /* Sleeper kan vara otillgangligt - visa resten anda */ }
+
+  const legacyTeam = findLegacy2025Team(p);
+  const currentTeam = (sleeperInfo && sleeperInfo.team) || p.team;
+  const teamChanged = legacyTeam && currentTeam && legacyTeam !== currentTeam;
+
+  const stats = find2025Stats(p);
+
+  const rowsHtml = [
+    sleeperInfo && sleeperInfo.age ? `<div class="turn-popup-needs">Ålder: <strong>${sleeperInfo.age}</strong></div>` : '',
+    sleeperInfo && (sleeperInfo.years_exp !== null && sleeperInfo.years_exp !== undefined) ? `<div class="turn-popup-needs">År i ligan: <strong>${sleeperInfo.years_exp === 0 ? 'Rookie' : sleeperInfo.years_exp}</strong></div>` : '',
+    sleeperInfo && sleeperInfo.depth_chart_position ? `<div class="turn-popup-needs">Depth chart: <strong>${escapeHtml(sleeperInfo.depth_chart_position)}${sleeperInfo.depth_chart_order ? ' #' + sleeperInfo.depth_chart_order : ''}</strong></div>` : '',
+    teamChanged ? `<div class="turn-popup-needs" style="color:var(--pos-dst);">⚠ Bytte lag sen 2025: ${escapeHtml(legacyTeam)} → ${escapeHtml(currentTeam)}</div>` : '',
+  ].filter(Boolean).join('');
+
+  const statsHtml = stats ? `
+    <div class="lineup-slot-label" style="margin:14px 0 8px;">2025 SÄSONGEN (${stats.g} matcher)</div>
+    <div class="bench-list">
+      ${stats.ruAtt || stats.ruYds ? `<span class="bench-chip">${stats.ruAtt} carries, ${stats.ruYds} yards, ${stats.ruTD} TD</span>` : ''}
+      ${stats.rec || stats.tgts ? `<span class="bench-chip">${stats.rec}/${stats.tgts} mål, ${stats.recYds} yards, ${stats.recTD} TD</span>` : ''}
+      ${stats.paYds ? `<span class="bench-chip">${stats.paYds} pass yards, ${stats.paTD} TD, ${stats.int} INT</span>` : ''}
+      <span class="bench-chip">${stats.ppr} PPR-poäng · ${stats.snapPct} snaps</span>
+    </div>
+  ` : '<p class="desc" style="margin-top:14px;">Ingen 2025-statistik hittad (t.ex. rookie eller K/DST).</p>';
+
+  body.innerHTML = `
+    <p class="turn-popup-sub">${escapeHtml(p.pos)} · ${escapeHtml(currentTeam)}${p.rank ? ' · Rank #' + p.rank : ''}${p.adp ? ' · ADP ' + escapeHtml(p.adp) : ''}</p>
+    <h3 style="margin:4px 0 10px;">${escapeHtml(p.full || p.name)}</h3>
+    ${rowsHtml || '<p class="desc">Ingen extra Sleeper-info hittad för den här spelaren.</p>'}
+    ${statsHtml}
+  `;
+}
+
 let allPlayersPosFilter = new Set(POS_OPTIONS);
 
 function renderRankingPage(cat){
@@ -3294,6 +3362,7 @@ function renderRankingPage(cat){
         <td class="adp-td-name">
           <span class="pos-badge ${posClass(p.pos)}">${escapeHtml(p.pos)}</span>
           ${escapeHtml(p.name)} <span class="adp-td-team">${escapeHtml(p.team)}</span>${p.rookie?'<span class="rookie-badge">R</span>':''}
+          <button class="btn" style="padding:1px 6px; font-size:10px; margin-left:6px;" data-action="show-player-info" data-label="${escapeAttr(formatPlayerLabel(p))}" title="Spelarinfo">ℹ️</button>
         </td>
         <td class="adp-td">${escapeHtml(p.adp)}</td>
         ${siteCellsHtml}
@@ -3875,7 +3944,8 @@ function showSuggestions(input){
 
   box.innerHTML = (matches.length ? matches.map(p => `
     <div class="suggest-row ${posClass(p.pos)}" data-league="${key}" data-pick-key="${pickKey}" data-label="${escapeAttr(formatPlayerLabel(p))}">
-      <span><span class="pos-badge ${posClass(p.pos)}">${escapeHtml(p.pos)}</span> ${escapeHtml(p.name)}${p.rookie?' <span class="rookie-badge">R</span>':''}</span>
+      <span><span class="pos-badge ${posClass(p.pos)}">${escapeHtml(p.pos)}</span> ${escapeHtml(p.name)}${p.rookie?' <span class="rookie-badge">R</span>':''}
+      <button class="btn" style="padding:0px 5px; font-size:9px; margin-left:4px;" data-action="show-player-info" data-label="${escapeAttr(formatPlayerLabel(p))}" title="Spelarinfo">ℹ️</button></span>
       <span class="suggest-meta">${p.rank} · ${p.team} · ADP ${p.adp}</span>
     </div>
   `).join('') : (rawQuery.length >= 2 ? '' : `<div class="suggest-empty">Inga träffar</div>`)) + freeTextRow;
@@ -4139,6 +4209,12 @@ document.addEventListener('click', (e) => {
   if(mockPopupDraftBtn){
     mockPickPlayer(mockPopupDraftBtn.dataset.label);
     hideTurnPopup();
+    return;
+  }
+
+  const playerInfoBtn = e.target.closest('[data-action="show-player-info"]');
+  if(playerInfoBtn){
+    showPlayerInfoPopup(playerInfoBtn.dataset.label);
     return;
   }
 
