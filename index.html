@@ -3481,16 +3481,30 @@ async function showPlayerInfoPopup(label){
   }
 }
 
-function showEspnAnalysis(text){
-  if(!text) return;
+function showEspnAnalysis(result){
+  if(!result || !result.text) return;
   const box = document.getElementById('espn-analysis');
   if(!box) return;
   box.innerHTML = `
     <div style="margin:0 0 12px; padding:10px 12px; background:var(--panel-2); border-radius:8px; border:1px solid var(--line);">
       <div class="lineup-slot-label" style="margin-bottom:4px;">ANALYS (ESPN/RotoWire)</div>
-      <p class="desc" style="margin:0;">${escapeHtml(text)}</p>
+      <p class="desc" style="margin:0 0 ${result.link ? '6px' : '0'};">${escapeHtml(result.text)}</p>
+      ${result.link ? `<a href="${escapeAttr(result.link)}" target="_blank" rel="noopener" style="color:var(--silver); font-size:12px;">↗ Läs hela artikeln</a>` : ''}
     </div>
   `;
+}
+
+function extractEspnLink(item){
+  // ESPN anvander lite olika struktur pa olika endpoints - prova de vanligaste monstren
+  const candidates = [
+    item.link, item.url,
+    item.link && item.link.web,
+    item.link && item.link.href,
+    item.links && item.links.web && item.links.web.href,
+    item.links && item.links.mobile && item.links.mobile.href,
+  ];
+  const found = candidates.find(v => typeof v === 'string' && v.startsWith('http'));
+  return found || null;
 }
 
 async function fetchEspnAnalysis(espnId){
@@ -3506,7 +3520,7 @@ async function fetchEspnAnalysis(espnId){
     for(const arr of candidates){
       for(const item of arr){
         const text = (item && (item.text || item.description || item.headline || item.summary)) || '';
-        if(text && text.length > 30) return text;
+        if(text && text.length > 30) return { text, link: extractEspnLink(item || {}) };
       }
     }
   }catch(e){ /* CORS eller natverksfel - visa helt enkelt ingen analystext */ }
