@@ -656,6 +656,7 @@
           <option value="bears">Chicago Bears</option>
         </select>
       </label>
+      <button class="backup-btn" data-action="refresh-app" title="Ladda om appen (ingen dra-för-att-uppdatera i helskärmsläge)">🔄 Uppdatera</button>
     </div>
     <div class="backup-row">
       <button class="backup-btn" data-action="export-backup">💾 Exportera backup</button>
@@ -4265,6 +4266,9 @@ document.addEventListener('click', (e) => {
 
   const exportBtn = e.target.closest('[data-action="export-backup"]');
   if(exportBtn){ exportBackup(); return; }
+
+  const refreshBtn = e.target.closest('[data-action="refresh-app"]');
+  if(refreshBtn){ window.location.reload(); return; }
 
   const importBtn = e.target.closest('[data-action="import-backup"]');
   if(importBtn){
