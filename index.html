@@ -3428,10 +3428,42 @@ async function showPlayerInfoPopup(label){
     ${photoUrl ? `<img src="${escapeAttr(photoUrl)}" alt="" style="width:64px; height:64px; border-radius:8px; object-fit:cover; float:right; border:1px solid var(--line); background:var(--panel-2);" onerror="this.style.display='none';">` : ''}
     <p class="turn-popup-sub">${escapeHtml(p.pos)} · ${escapeHtml(currentTeam)}${p.rank ? ' · Rank #' + p.rank : ''}${p.adp ? ' · ADP ' + escapeHtml(p.adp) : ''}</p>
     <h3 style="margin:4px 0 10px;">${escapeHtml(p.full || p.name)}</h3>
-    ${espnUrl ? `<p style="margin:0 0 10px;"><a href="${escapeAttr(espnUrl)}" target="_blank" rel="noopener" style="color:var(--silver); font-size:12px;">${espnLinkLabel}</a></p>` : ''}
+    ${espnUrl ? `<p style="margin:0 0 10px;"><a href="${escapeAttr(espnUrl)}" target="_blank" rel="noopener" id="espn-link" style="color:var(--silver); font-size:12px;">${espnLinkLabel}</a></p>` : ''}
     ${rowsHtml || '<p class="desc">Ingen extra Sleeper-info hittad för den här spelaren.</p>'}
     ${statsHtml}
   `;
+
+  // Om Sleeper saknade ID: forsok hitta ratt ESPN-sida direkt via ESPNs eget sok-API (progressiv forbattring - uppdaterar lanken i efterhand om det lyckas, annars ligger Google-sokningen kvar)
+  if(!sleeperInfo || !sleeperInfo.espn_id){
+    tryFindEspnId(p.full || p.name).then(foundId => {
+      if(!foundId) return;
+      const link = document.getElementById('espn-link');
+      if(!link) return;
+      link.href = `https://www.espn.com/nfl/player/_/id/${foundId}/${espnSlug}`;
+      link.textContent = '↗ Öppna på ESPN';
+    });
+  }
+}
+
+async function tryFindEspnId(name){
+  try{
+    const res = await fetch(`https://site.web.api.espn.com/apis/search/v2?query=${encodeURIComponent(name)}&sport=football&limit=5`);
+    if(!res.ok) return null;
+    const data = await res.json();
+    const sections = data.results || data.sections || [];
+    for(const section of sections){
+      const items = section.contents || section.items || [];
+      for(const item of items){
+        const uid = item.uid || '';
+        const fromUid = uid.match(/a:(\d+)/);
+        if(fromUid) return fromUid[1];
+        const webLink = item.link && (item.link.web || (item.link.links && item.link.links[0] && item.link.links[0].href));
+        const fromLink = webLink && webLink.match(/\/id\/(\d+)\//);
+        if(fromLink) return fromLink[1];
+      }
+    }
+  }catch(e){ /* CORS eller natverksfel - Google-sokningen ligger kvar som fallback */ }
+  return null;
 }
 
 let allPlayersPosFilter = new Set(POS_OPTIONS);
