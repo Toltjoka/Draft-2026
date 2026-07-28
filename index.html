@@ -3452,7 +3452,7 @@ async function showPlayerInfoPopup(label){
 
   body.innerHTML = `
     ${photoUrl ? `<img src="${escapeAttr(photoUrl)}" alt="" style="width:64px; height:64px; border-radius:8px; object-fit:cover; float:right; border:1px solid var(--line); background:var(--panel-2);" onerror="this.style.display='none';">` : ''}
-    <p class="turn-popup-sub">${escapeHtml(p.pos)} · ${escapeHtml(currentTeam)}${p.rank ? ' · Rank #' + p.rank : ''}${p.adp ? ' · ADP ' + escapeHtml(p.adp) : ''}</p>
+    <p class="turn-popup-sub">${teamLogoImg(currentTeam, 16)}${escapeHtml(p.pos)} · ${escapeHtml(currentTeam)}${p.rank ? ' · Rank #' + p.rank : ''}${p.adp ? ' · ADP ' + escapeHtml(p.adp) : ''}</p>
     <h3 style="margin:4px 0 10px;">${escapeHtml(p.full || p.name)}</h3>
     ${espnUrl ? `<p style="margin:0 0 10px;"><a href="${escapeAttr(espnUrl)}" target="_blank" rel="noopener" id="espn-link" style="color:var(--silver); font-size:12px; font-family:'Inter',sans-serif; font-weight:400;">${EXTERNAL_LINK_ICON_SVG} ${espnLinkLabel}</a></p>` : ''}
     <div id="espn-analysis"></div>
@@ -3628,7 +3628,7 @@ function renderRankingPage(cat){
       <tr class="adp-row ${posClass(p.pos)}${isTaken?' taken':''}">
         <td class="adp-td-name">
           <span class="pos-badge ${posClass(p.pos)}">${escapeHtml(p.pos)}</span>
-          ${escapeHtml(p.name)} <span class="adp-td-team">${escapeHtml(p.team)}</span>${p.rookie?'<span class="rookie-badge">R</span>':''}${injuryBadge(p)}
+          ${escapeHtml(p.name)} <span class="adp-td-team">${teamLogoImg(p.team, 14)}${escapeHtml(p.team)}</span>${p.rookie?'<span class="rookie-badge">R</span>':''}${injuryBadge(p)}
           <button class="btn" style="padding:1px 6px; font-size:10px; margin-left:6px;" data-action="show-player-info" data-label="${escapeAttr(formatFullPlayerLabel(p))}" title="Spelarinfo">${NEWS_ICON_SVG}</button>
         </td>
         <td class="adp-td">${escapeHtml(p.adp)}</td>
@@ -3755,6 +3755,19 @@ function injuryBadge(p){
     return `<span class="injury-badge" title="${escapeAttr(tip)}">⚠</span>`;
   }
   return '';
+}
+
+const ESPN_TEAM_ABBR_OVERRIDES = { WAS: 'wsh' };
+function teamLogoUrl(team){
+  if(!team || team === '-' || team === "'-") return '';
+  const abbr = ESPN_TEAM_ABBR_OVERRIDES[team.toUpperCase()] || team.toLowerCase();
+  return `https://a.espncdn.com/i/teamlogos/nfl/500/${abbr}.png`;
+}
+function teamLogoImg(team, size){
+  const url = teamLogoUrl(team);
+  if(!url) return '';
+  const s = size || 16;
+  return `<img src="${escapeAttr(url)}" alt="" style="width:${s}px; height:${s}px; vertical-align:-3px; margin-right:3px;" onerror="this.style.display='none';">`;
 }
 
 function posClass(pos){
