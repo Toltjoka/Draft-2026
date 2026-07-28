@@ -937,14 +937,23 @@ function normPlayerName(fullName){
 }
 
 let PLAYERS_INDEX = null;
+let PLAYERS_NAME_INDEX = null;
+let PLAYERS_FALLBACK = null;
 function buildPlayersIndex(){
   PLAYERS_INDEX = new Map();
+  PLAYERS_NAME_INDEX = new Map();
+  const fallbackCounts = new Map();
+  const fallback = new Map();
   PLAYERS.forEach(p => {
-    const key1 = `${p.pos}|${p.team}|${normPlayerName(p.name)}`;
-    const key2 = `${p.pos}|${normPlayerName(p.name)}`;
-    PLAYERS_INDEX.set(key1, p);
-    if(!PLAYERS_INDEX.has(key2)) PLAYERS_INDEX.set(key2, p);
+    const fullKey = (p.full || p.name).toLowerCase();
+    PLAYERS_INDEX.set(`${p.pos}|${p.team}|${fullKey}`, p);
+    PLAYERS_NAME_INDEX.set(`${p.pos}|${fullKey}`, p);
+    const normKey = `${p.pos}|${normPlayerName(p.name)}`;
+    fallbackCounts.set(normKey, (fallbackCounts.get(normKey) || 0) + 1);
+    if(!fallback.has(normKey)) fallback.set(normKey, p);
   });
+  fallbackCounts.forEach((count, key) => { if(count > 1) fallback.delete(key); });
+  PLAYERS_FALLBACK = fallback;
 }
 
 function findCurrentPlayer(legacyPlayer){
@@ -952,9 +961,11 @@ function findCurrentPlayer(legacyPlayer){
   if(legacyPlayer.pos === 'DST'){
     return PLAYERS.find(p => p.pos === 'DST' && p.team === legacyPlayer.team) || null;
   }
+  const fullKey = (legacyPlayer.full || legacyPlayer.name).toLowerCase();
   const norm = normPlayerName(legacyPlayer.name);
-  return PLAYERS_INDEX.get(`${legacyPlayer.pos}|${legacyPlayer.team}|${norm}`)
-    || PLAYERS_INDEX.get(`${legacyPlayer.pos}|${norm}`)
+  return PLAYERS_INDEX.get(`${legacyPlayer.pos}|${legacyPlayer.team}|${fullKey}`)
+    || PLAYERS_NAME_INDEX.get(`${legacyPlayer.pos}|${fullKey}`)
+    || PLAYERS_FALLBACK.get(`${legacyPlayer.pos}|${norm}`)
     || null;
 }
 
