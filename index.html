@@ -3346,6 +3346,7 @@ async function showPlayerInfoPopup(label){
   }
 
   const rowsHtml = [
+    sleeperInfo && sleeperInfo.injury_status ? `<div class="turn-popup-needs" style="color:var(--pos-dst); font-weight:700;">⚠ ${escapeHtml(sleeperInfo.injury_status)}${sleeperInfo.injury_body_part ? ' (' + escapeHtml(sleeperInfo.injury_body_part) + ')' : ''}</div>` : '',
     sleeperInfo && sleeperInfo.age ? `<div class="turn-popup-needs">Ålder: <strong>${sleeperInfo.age}</strong></div>` : '',
     sleeperInfo && (sleeperInfo.years_exp !== null && sleeperInfo.years_exp !== undefined) ? `<div class="turn-popup-needs">År i ligan: <strong>${sleeperInfo.years_exp === 0 ? 'Rookie' : sleeperInfo.years_exp}</strong></div>` : '',
     sleeperInfo && sleeperInfo.depth_chart_position ? `<div class="turn-popup-needs">
