@@ -3419,13 +3419,16 @@ async function showPlayerInfoPopup(label){
 
   const photoUrl = sleeperInfo && sleeperInfo.player_id ? `https://sleepercdn.com/content/nfl/players/${sleeperInfo.player_id}.jpg` : '';
   const espnSlug = (p.full || p.name).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
-  const espnUrl = sleeperInfo && sleeperInfo.espn_id ? `https://www.espn.com/nfl/player/_/id/${sleeperInfo.espn_id}/${espnSlug}` : '';
+  const espnUrl = sleeperInfo && sleeperInfo.espn_id
+    ? `https://www.espn.com/nfl/player/_/id/${sleeperInfo.espn_id}/${espnSlug}`
+    : `https://www.google.com/search?q=${encodeURIComponent('site:espn.com/nfl/player ' + (p.full || p.name))}`;
+  const espnLinkLabel = sleeperInfo && sleeperInfo.espn_id ? '↗ Öppna på ESPN' : '↗ Sök på ESPN (inget ID hittat)';
 
   body.innerHTML = `
     ${photoUrl ? `<img src="${escapeAttr(photoUrl)}" alt="" style="width:64px; height:64px; border-radius:8px; object-fit:cover; float:right; border:1px solid var(--line); background:var(--panel-2);" onerror="this.style.display='none';">` : ''}
     <p class="turn-popup-sub">${escapeHtml(p.pos)} · ${escapeHtml(currentTeam)}${p.rank ? ' · Rank #' + p.rank : ''}${p.adp ? ' · ADP ' + escapeHtml(p.adp) : ''}</p>
     <h3 style="margin:4px 0 10px;">${escapeHtml(p.full || p.name)}</h3>
-    ${espnUrl ? `<p style="margin:0 0 10px;"><a href="${escapeAttr(espnUrl)}" target="_blank" rel="noopener" style="color:var(--silver); font-size:12px;">↗ Öppna på ESPN</a></p>` : ''}
+    ${espnUrl ? `<p style="margin:0 0 10px;"><a href="${escapeAttr(espnUrl)}" target="_blank" rel="noopener" style="color:var(--silver); font-size:12px;">${espnLinkLabel}</a></p>` : ''}
     ${rowsHtml || '<p class="desc">Ingen extra Sleeper-info hittad för den här spelaren.</p>'}
     ${statsHtml}
   `;
