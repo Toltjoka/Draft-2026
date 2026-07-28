@@ -743,6 +743,7 @@
       <button class="nav-btn admin-only-view" data-action="switch-page" data-page="WEEKLY">🏈 Start of the Week</button>
       <button class="nav-btn" data-action="switch-page" data-page="MOCK">🎯 Mock Draft</button>
       <button class="nav-btn" data-action="switch-page" data-page="TRENDING">🔥 Trending</button>
+      <button class="nav-btn admin-only-view" data-action="switch-page" data-page="THISWEEK">📅 Denna vecka</button>
     </div>
   </div>
 
@@ -763,6 +764,7 @@
   <section class="page admin-only-view" data-page="WEEKLY" id="page-WEEKLY"></section>
   <section class="page" data-page="MOCK" id="page-MOCK"></section>
   <section class="page" data-page="TRENDING" id="page-TRENDING"></section>
+  <section class="page admin-only-view" data-page="THISWEEK" id="page-THISWEEK"></section>
   <datalist id="all-players-datalist"></datalist>
   <datalist id="mock-keeper-datalist"></datalist>
   <audio id="custom-sound-player" preload="auto"></audio>
@@ -3050,6 +3052,7 @@ function switchPage(page){
   if(page === 'WEEKLY') { renderWeeklyPage(); autoLoadSleeperHubs(); }
   if(page === 'MOCK') renderMockPage();
   if(page === 'TRENDING') renderTrendingPage();
+  if(page === 'THISWEEK') renderThisWeekPage();
   if(page === 'balla' || page === 'douche') scrollToCurrentPick(page);
 }
 
@@ -3862,6 +3865,203 @@ function renderMyTeamPage(){
   el.innerHTML = `${switcherHtml}<div class="myteam-wrap">${sections}</div>`;
 }
 
+// Stadion-koordinater + inomhus-flagga, for vaderprognoser (statisk data, byggd fran allman kunskap om NFL-arenor 2026)
+const STADIUM_DATA = {
+  ARI: { lat: 33.5276, lon: -112.2626, dome: true, name: "State Farm Stadium" },
+  ATL: { lat: 33.7554, lon: -84.4008, dome: true, name: "Mercedes-Benz Stadium" },
+  BAL: { lat: 39.2780, lon: -76.6227, dome: false, name: "M&T Bank Stadium" },
+  BUF: { lat: 42.7738, lon: -78.7870, dome: false, name: "Highmark Stadium" },
+  CAR: { lat: 35.2258, lon: -80.8528, dome: false, name: "Bank of America Stadium" },
+  CHI: { lat: 41.8623, lon: -87.6167, dome: false, name: "Soldier Field" },
+  CIN: { lat: 39.0955, lon: -84.5160, dome: false, name: "Paycor Stadium" },
+  CLE: { lat: 41.5061, lon: -81.6995, dome: false, name: "Huntington Bank Field" },
+  DAL: { lat: 32.7473, lon: -97.0945, dome: true, name: "AT&T Stadium" },
+  DEN: { lat: 39.7439, lon: -105.0201, dome: false, name: "Empower Field at Mile High" },
+  DET: { lat: 42.3400, lon: -83.0456, dome: true, name: "Ford Field" },
+  GB: { lat: 44.5013, lon: -88.0622, dome: false, name: "Lambeau Field" },
+  HOU: { lat: 29.6847, lon: -95.4107, dome: true, name: "NRG Stadium" },
+  IND: { lat: 39.7601, lon: -86.1639, dome: true, name: "Lucas Oil Stadium" },
+  JAX: { lat: 30.3239, lon: -81.6373, dome: false, name: "EverBank Stadium" },
+  KC: { lat: 39.0489, lon: -94.4839, dome: false, name: "GEHA Field at Arrowhead" },
+  LAC: { lat: 33.9535, lon: -118.3392, dome: false, name: "SoFi Stadium" },
+  LAR: { lat: 33.9535, lon: -118.3392, dome: false, name: "SoFi Stadium" },
+  LV: { lat: 36.0909, lon: -115.1833, dome: true, name: "Allegiant Stadium" },
+  MIA: { lat: 25.9580, lon: -80.2389, dome: false, name: "Hard Rock Stadium" },
+  MIN: { lat: 44.9737, lon: -93.2581, dome: true, name: "U.S. Bank Stadium" },
+  NE: { lat: 42.0909, lon: -71.2643, dome: false, name: "Gillette Stadium" },
+  NO: { lat: 29.9509, lon: -90.0815, dome: true, name: "Caesars Superdome" },
+  NYG: { lat: 40.8135, lon: -74.0745, dome: false, name: "MetLife Stadium" },
+  NYJ: { lat: 40.8135, lon: -74.0745, dome: false, name: "MetLife Stadium" },
+  PHI: { lat: 39.9008, lon: -75.1675, dome: false, name: "Lincoln Financial Field" },
+  PIT: { lat: 40.4468, lon: -80.0158, dome: false, name: "Acrisure Stadium" },
+  SF: { lat: 37.4030, lon: -121.9700, dome: false, name: "Levi's Stadium" },
+  SEA: { lat: 47.5952, lon: -122.3316, dome: false, name: "Lumen Field" },
+  TB: { lat: 27.9759, lon: -82.5033, dome: false, name: "Raymond James Stadium" },
+  TEN: { lat: 36.1665, lon: -86.7713, dome: false, name: "Nissan Stadium" },
+  WAS: { lat: 38.9077, lon: -76.8645, dome: false, name: "Commanders Field" },
+};
+
+let thisWeekCache = null;
+async function renderThisWeekPage(){
+  const el = document.getElementById('page-THISWEEK');
+  if(!el) return;
+
+  if(!thisWeekCache){
+    el.innerHTML = `<div class="card"><h2>📅 Denna vecka</h2><p class="desc">Hämtar matcher, väder och statistik…</p></div>`;
+    try{
+      const [scoreboardRes, standingsRes, playersMap] = await Promise.all([
+        fetch('https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard').then(r => r.json()),
+        fetch('https://site.api.espn.com/apis/site/v2/sports/football/nfl/standings').then(r => r.json()).catch(() => null),
+        sleeperFetchPlayersMap().catch(() => null),
+      ]);
+      if(!sleeperNameIndex && playersMap) buildSleeperNameIndex(playersMap);
+
+      const teamStats = buildTeamStatsLookup(standingsRes);
+
+      const games = (scoreboardRes.events || []).map(ev => {
+        const comp = ev.competitions && ev.competitions[0];
+        if(!comp || !comp.competitors) return null;
+        const home = comp.competitors.find(c => c.homeAway === 'home');
+        const away = comp.competitors.find(c => c.homeAway === 'away');
+        if(!home || !away) return null;
+        return {
+          date: ev.date,
+          venueName: comp.venue && comp.venue.fullName,
+          homeAbbr: home.team && home.team.abbreviation,
+          awayAbbr: away.team && away.team.abbreviation,
+          statusDesc: ev.status && ev.status.type && ev.status.type.shortDetail,
+        };
+      }).filter(g => g && g.homeAbbr && g.awayAbbr);
+
+      // Hamta vader parallellt for alla utomhusmatcher
+      await Promise.all(games.map(async g => {
+        const stadium = STADIUM_DATA[g.homeAbbr];
+        if(!stadium || stadium.dome){ g.weather = null; return; }
+        try{
+          const dateStr = g.date.slice(0,10);
+          const wRes = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${stadium.lat}&longitude=${stadium.lon}&hourly=temperature_2m,precipitation_probability,windspeed_10m&start_date=${dateStr}&end_date=${dateStr}&timezone=auto`);
+          const wData = await wRes.json();
+          const gameHour = new Date(g.date).getUTCHours();
+          const times = (wData.hourly && wData.hourly.time) || [];
+          let idx = times.findIndex(t => new Date(t).getUTCHours() === gameHour);
+          if(idx === -1) idx = Math.floor(times.length / 2);
+          if(idx >= 0 && wData.hourly && wData.hourly.temperature_2m){
+            g.weather = {
+              temp: wData.hourly.temperature_2m[idx],
+              precip: wData.hourly.precipitation_probability[idx],
+              wind: wData.hourly.windspeed_10m[idx],
+            };
+          }
+        }catch(e){ g.weather = null; }
+      }));
+
+      thisWeekCache = { games, teamStats, weekLabel: (scoreboardRes.week && scoreboardRes.week.text) || '', fetchedAt: new Date() };
+    }catch(e){
+      el.innerHTML = `<div class="card"><h2>📅 Denna vecka</h2><p class="desc">Kunde inte hämta veckans matcher just nu (${escapeHtml(String(e.message || e))}). Kolla internetanslutningen och försök igen.</p></div>`;
+      return;
+    }
+  }
+
+  renderThisWeekFromCache(el);
+}
+
+function buildTeamStatsLookup(standingsRes){
+  const lookup = {};
+  if(!standingsRes) return lookup;
+  try{
+    const entries = [];
+    (standingsRes.children || []).forEach(conf => {
+      ((conf.standings && conf.standings.entries) || []).forEach(entry => entries.push(entry));
+    });
+    entries.forEach(entry => {
+      const abbr = entry.team && entry.team.abbreviation;
+      if(!abbr) return;
+      const stats = {};
+      (entry.stats || []).forEach(s => { stats[s.name || s.type] = s.value; });
+      lookup[abbr] = {
+        wins: stats.wins, losses: stats.losses,
+        pointsFor: stats.pointsFor, pointsAgainst: stats.pointsAgainst,
+      };
+    });
+  }catch(e){ /* okant svarsformat - visa bara utan statistik istallet for att krascha */ }
+  const withPF = Object.entries(lookup).filter(([,v]) => typeof v.pointsFor === 'number');
+  [...withPF].sort((a,b) => b[1].pointsFor - a[1].pointsFor).forEach(([abbr], i) => { lookup[abbr].offRank = i + 1; });
+  const withPA = Object.entries(lookup).filter(([,v]) => typeof v.pointsAgainst === 'number');
+  [...withPA].sort((a,b) => a[1].pointsAgainst - b[1].pointsAgainst).forEach(([abbr], i) => { lookup[abbr].defRank = i + 1; });
+  return lookup;
+}
+
+function getTeamInjuries(teamAbbr, limit){
+  if(!sleeperNameIndex) return [];
+  const injured = [];
+  PLAYERS.filter(p => p.team === teamAbbr).forEach(p => {
+    const sp = lookupSleeperPlayer(p);
+    if(sp && sp.injury_status){
+      const adpNum = parseFloat(p.adp);
+      injured.push({ name: p.full || p.name, pos: p.pos, status: sp.injury_status, bodyPart: sp.injury_body_part, adpNum: isNaN(adpNum) ? 999 : adpNum });
+    }
+  });
+  injured.sort((a,b) => a.adpNum - b.adpNum);
+  return injured.slice(0, limit || 5);
+}
+
+function renderThisWeekFromCache(el){
+  const { games, teamStats, weekLabel } = thisWeekCache;
+  const gameCardsHtml = games.map(g => {
+    const homeInj = getTeamInjuries(g.homeAbbr, 4);
+    const awayInj = getTeamInjuries(g.awayAbbr, 4);
+    const homeStats = teamStats[g.homeAbbr];
+    const awayStats = teamStats[g.awayAbbr];
+    let kickoff = g.date;
+    try{ kickoff = new Date(g.date).toLocaleString('sv-SE', { weekday: 'short', hour: '2-digit', minute: '2-digit' }); }catch(e){}
+    const stadium = STADIUM_DATA[g.homeAbbr];
+    const weatherHtml = g.weather
+      ? `<div class="turn-popup-needs" style="margin-top:8px;">🌤️ ${Math.round(g.weather.temp)}°C · ${Math.round(g.weather.precip)}% regn · ${Math.round(g.weather.wind)} km/h vind</div>`
+      : (stadium && stadium.dome ? `<div class="turn-popup-needs" style="margin-top:8px;">🏟️ Inomhus (ingen väderpåverkan)</div>` : '');
+
+    const statsLine = (stats) => stats && (stats.wins !== undefined)
+      ? `${stats.wins ?? '-'}-${stats.losses ?? '-'} · Off #${stats.offRank ?? '-'} · Def #${stats.defRank ?? '-'}`
+      : 'Ingen statistik än';
+
+    const injuryList = (list) => list.length
+      ? list.map(i => `<div style="font-size:11px; color:var(--chalk-dim);">${escapeHtml(i.pos)} ${escapeHtml(i.name)} – <span style="color:var(--pos-dst);">${escapeHtml(i.status)}</span>${i.bodyPart ? ' (' + escapeHtml(i.bodyPart) + ')' : ''}</div>`).join('')
+      : `<div style="font-size:11px; color:var(--chalk-dim);">Inga kända skador</div>`;
+
+    return `
+      <div class="card" style="margin-bottom:14px;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+          <div style="font-family:'IBM Plex Mono',monospace; font-size:12px; color:var(--chalk-dim);">${escapeHtml(String(kickoff))}${g.statusDesc ? ' · ' + escapeHtml(g.statusDesc) : ''}</div>
+          <div style="font-size:11px; color:var(--chalk-dim);">${escapeHtml(g.venueName || '')}</div>
+        </div>
+        <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:10px;">
+          <div style="flex:1;">
+            <div style="font-weight:700;">${teamLogoImg(g.awayAbbr, 22)}${escapeHtml(g.awayAbbr)}</div>
+            <div style="font-size:11px; color:var(--chalk-dim); margin:2px 0 6px;">${statsLine(awayStats)}</div>
+            ${injuryList(awayInj)}
+          </div>
+          <div style="font-family:'Bebas Neue',sans-serif; font-size:20px; color:var(--chalk-dim); padding-top:2px;">@</div>
+          <div style="flex:1; text-align:right;">
+            <div style="font-weight:700;">${escapeHtml(g.homeAbbr)}${teamLogoImg(g.homeAbbr, 22)}</div>
+            <div style="font-size:11px; color:var(--chalk-dim); margin:2px 0 6px;">${statsLine(homeStats)}</div>
+            ${injuryList(homeInj)}
+          </div>
+        </div>
+        ${weatherHtml}
+      </div>
+    `;
+  }).join('');
+
+  el.innerHTML = `
+    <div class="card">
+      <h2>📅 Denna vecka${weekLabel ? ' — ' + escapeHtml(weekLabel) : ''}</h2>
+      <p class="desc">Alla matcher, väder (utomhusarenor) samt lagstatistik och skadelägen inför helgen.
+        <button class="btn" style="margin-left:8px; font-size:11px; padding:3px 8px;" data-action="refresh-thisweek">🔄 Uppdatera</button>
+      </p>
+    </div>
+    ${gameCardsHtml || '<div class="card"><p class="desc">Inga matcher hittades för denna vecka (kan bero på att säsongen inte startat än).</p></div>'}
+  `;
+}
+
 let trendingCache = null; // {add: [...], drop: [...], fetchedAt}
 async function renderTrendingPage(){
   const el = document.getElementById('page-TRENDING');
@@ -4471,6 +4671,9 @@ document.addEventListener('click', (e) => {
 
   const refreshTrendingBtn = e.target.closest('[data-action="refresh-trending"]');
   if(refreshTrendingBtn){ trendingCache = null; renderTrendingPage(); return; }
+
+  const refreshThisWeekBtn = e.target.closest('[data-action="refresh-thisweek"]');
+  if(refreshThisWeekBtn){ thisWeekCache = null; renderThisWeekPage(); return; }
 
   const importBtn = e.target.closest('[data-action="import-backup"]');
   if(importBtn){
