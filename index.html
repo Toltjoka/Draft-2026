@@ -959,32 +959,43 @@ function findCurrentPlayer(legacyPlayer){
 }
 
 let STATS_2025_INDEX = null;
-function buildStats2025Index(){
-  STATS_2025_INDEX = new Map();
-  PLAYER_STATS_2025.forEach(s => {
-    const key1 = `${s.pos}|${s.team}|${normPlayerName(s.name)}`;
-    const key2 = `${s.pos}|${normPlayerName(s.name)}`;
-    STATS_2025_INDEX.set(key1, s);
-    if(!STATS_2025_INDEX.has(key2)) STATS_2025_INDEX.set(key2, s);
+let STATS_2025_NAME_INDEX = null;
+let STATS_2025_FALLBACK = null;
+function buildStatsIndexGeneric(arr){
+  const withTeam = new Map();
+  const byName = new Map();
+  const fallbackCounts = new Map();
+  const fallback = new Map();
+  arr.forEach(s => {
+    const nameKey = s.name.toLowerCase();
+    withTeam.set(`${s.pos}|${s.team}|${nameKey}`, s);
+    byName.set(`${s.pos}|${nameKey}`, s);
+    const normKey = `${s.pos}|${normPlayerName(s.name)}`;
+    fallbackCounts.set(normKey, (fallbackCounts.get(normKey) || 0) + 1);
+    if(!fallback.has(normKey)) fallback.set(normKey, s);
   });
+  fallbackCounts.forEach((count, key) => { if(count > 1) fallback.delete(key); });
+  return { withTeam, byName, fallback };
+}
+function buildStats2025Index(){
+  const idx = buildStatsIndexGeneric(PLAYER_STATS_2025);
+  STATS_2025_INDEX = idx.withTeam;
+  STATS_2025_NAME_INDEX = idx.byName;
+  STATS_2025_FALLBACK = idx.fallback;
 }
 
 function find2025Stats(p){
   if(!STATS_2025_INDEX) buildStats2025Index();
-  const norm = normPlayerName(p.name);
-  return STATS_2025_INDEX.get(`${p.pos}|${p.team}|${norm}`) || STATS_2025_INDEX.get(`${p.pos}|${norm}`) || null;
+  const fullName = (p.full || p.name).toLowerCase();
+  return STATS_2025_INDEX.get(`${p.pos}|${p.team}|${fullName}`)
+    || STATS_2025_NAME_INDEX.get(`${p.pos}|${fullName}`)
+    || STATS_2025_FALLBACK.get(`${p.pos}|${normPlayerName(p.name)}`)
+    || null;
 }
 
 const STATS_BY_YEAR_INDEX = {};
 function buildStatsYearIndex(year, arr){
-  const idx = new Map();
-  arr.forEach(s => {
-    const key1 = `${s.pos}|${s.team}|${normPlayerName(s.name)}`;
-    const key2 = `${s.pos}|${normPlayerName(s.name)}`;
-    idx.set(key1, s);
-    if(!idx.has(key2)) idx.set(key2, s);
-  });
-  STATS_BY_YEAR_INDEX[year] = idx;
+  STATS_BY_YEAR_INDEX[year] = buildStatsIndexGeneric(arr);
 }
 
 function findStatsForYear(p, year){
@@ -994,8 +1005,12 @@ function findStatsForYear(p, year){
     if(!arr) return null;
     buildStatsYearIndex(year, arr);
   }
-  const norm = normPlayerName(p.name);
-  return STATS_BY_YEAR_INDEX[year].get(`${p.pos}|${p.team}|${norm}`) || STATS_BY_YEAR_INDEX[year].get(`${p.pos}|${norm}`) || null;
+  const idx = STATS_BY_YEAR_INDEX[year];
+  const fullName = (p.full || p.name).toLowerCase();
+  return idx.withTeam.get(`${p.pos}|${p.team}|${fullName}`)
+    || idx.byName.get(`${p.pos}|${fullName}`)
+    || idx.fallback.get(`${p.pos}|${normPlayerName(p.name)}`)
+    || null;
 }
 
 function format2025StatsLine(s){
