@@ -754,6 +754,7 @@
         <button class="nav-btn" data-action="switch-page" data-page="TRENDING">🔥 Trending</button>
         <button class="nav-btn admin-only-view" data-action="switch-page" data-page="THISWEEK">📅 Denna vecka</button>
         <button class="nav-btn" data-action="switch-page" data-page="POWERRANK">📊 Power Rankings</button>
+        <button class="nav-btn admin-only-view" data-action="switch-page" data-page="TRADE">🔄 Trade-analysator</button>
       </div>
     </div>
   </div>
@@ -777,6 +778,7 @@
   <section class="page" data-page="TRENDING" id="page-TRENDING"></section>
   <section class="page admin-only-view" data-page="THISWEEK" id="page-THISWEEK"></section>
   <section class="page" data-page="POWERRANK" id="page-POWERRANK"></section>
+  <section class="page admin-only-view" data-page="TRADE" id="page-TRADE"></section>
   <datalist id="all-players-datalist"></datalist>
   <datalist id="mock-keeper-datalist"></datalist>
   <audio id="custom-sound-player" preload="auto"></audio>
@@ -3066,6 +3068,7 @@ function switchPage(page){
   if(page === 'TRENDING') renderTrendingPage();
   if(page === 'THISWEEK') renderThisWeekPage();
   if(page === 'POWERRANK') renderPowerRankPage();
+  if(page === 'TRADE') renderTradePage();
   if(page === 'balla' || page === 'douche') scrollToCurrentPick(page);
 }
 
@@ -4201,6 +4204,102 @@ function computeDraftValueRankings(leagueKey){
   return teamValues.filter(t => t.pickCount > 0).sort((a,b) => b.totalValue - a.totalValue);
 }
 
+let tradeUIState = { league: 'douche', teamA: 0, teamB: 1, selA: new Set(), selB: new Set() };
+
+function getTeamRosterForTrade(leagueKey, teamIdx){
+  const data = state[leagueKey];
+  if(!data) return [];
+  const roster = [];
+  Object.keys(data.picks || {}).forEach(pickKey => {
+    const parts = pickKey.split('-');
+    if(parseInt(parts[1]) !== teamIdx) return;
+    const label = data.picks[pickKey];
+    if(label) roster.push(label);
+  });
+  return roster;
+}
+
+function tradeValueForLabel(label){
+  if(!PLAYERS_FALLBACK) buildPlayersIndex();
+  const parsed = parsePlayerLabel(label);
+  const p = PLAYERS_FALLBACK.get(`${parsed.pos}|${normPlayerName(parsed.name)}`);
+  const adpOverall = p && adpToOverallPick(p.adp);
+  if(!adpOverall) return 1; // golv-varde for spelare utan ADP-data (t.ex. K/DST)
+  return Math.max(1, 300 - adpOverall);
+}
+
+function teamOptionsHtmlFor(leagueKey, selectedIdx){
+  return state[leagueKey].slots.map((name, i) => `<option value="${i}" ${i===selectedIdx?'selected':''}>${escapeHtml(name)}</option>`).join('');
+}
+
+function renderTradePage(){
+  const el = document.getElementById('page-TRADE');
+  if(!el) return;
+  const league = tradeUIState.league;
+  const data = state[league];
+  if(!data || !data.slots){
+    el.innerHTML = `<div class="card"><h2>🔄 Trade-analysator</h2><p class="desc">Ingen liga-data hittad.</p></div>`;
+    return;
+  }
+
+  const rosterA = getTeamRosterForTrade(league, tradeUIState.teamA);
+  const rosterB = getTeamRosterForTrade(league, tradeUIState.teamB);
+
+  const rosterChecklist = (roster, selSet, side) => roster.length ? roster.map(label => {
+    const parsed = parsePlayerLabel(label);
+    const checked = selSet.has(label);
+    const value = tradeValueForLabel(label);
+    return `
+      <label style="display:flex; align-items:center; gap:6px; padding:4px 0; font-size:13px; cursor:pointer;">
+        <input type="checkbox" data-action="trade-toggle-player" data-side="${side}" data-label="${escapeAttr(label)}" ${checked ? 'checked' : ''}>
+        <span class="pos-badge ${posClass(parsed.pos)}">${escapeHtml(parsed.pos)}</span>
+        ${escapeHtml(parsed.name)} <span style="color:var(--chalk-dim); font-size:11px;">(värde ~${Math.round(value)})</span>
+      </label>
+    `;
+  }).join('') : '<p class="desc">Inga spelare draftade än.</p>';
+
+  const totalA = [...tradeUIState.selA].reduce((sum, label) => sum + tradeValueForLabel(label), 0);
+  const totalB = [...tradeUIState.selB].reduce((sum, label) => sum + tradeValueForLabel(label), 0);
+
+  let verdict = 'Kryssa i spelare från båda sidor för att analysera bytet.';
+  if(tradeUIState.selA.size && tradeUIState.selB.size){
+    const diff = totalA - totalB;
+    const pct = Math.abs(diff) / Math.max(totalA, totalB, 1) * 100;
+    if(pct < 10) verdict = '⚖️ Ganska jämnt byte.';
+    else if(diff > 0) verdict = `📈 ${escapeHtml(data.slots[tradeUIState.teamB])} vinner bytet (får mest värde).`;
+    else verdict = `📈 ${escapeHtml(data.slots[tradeUIState.teamA])} vinner bytet (får mest värde).`;
+  }
+
+  el.innerHTML = `
+    <div class="card">
+      <h2>🔄 Trade-analysator</h2>
+      <p class="desc">Välj liga och två lag, kryssa i vilka spelare som ingår på varje sida. Värdet baseras på spelarnas ADP (draftvärde vid draften), inte aktuell form under säsongen.</p>
+      <div class="rounds-control">
+        Liga:
+        <select data-action="trade-set-league">
+          <option value="douche" ${league==='douche'?'selected':''}>Douchebag</option>
+          <option value="balla" ${league==='balla'?'selected':''}>Ballsvenkan</option>
+        </select>
+      </div>
+    </div>
+    <div style="display:flex; gap:14px; flex-wrap:wrap;">
+      <div class="card" style="flex:1; min-width:260px;">
+        <select data-action="trade-set-team" data-side="A" style="width:100%; margin-bottom:10px;">${teamOptionsHtmlFor(league, tradeUIState.teamA)}</select>
+        ${rosterChecklist(rosterA, tradeUIState.selA, 'A')}
+        <div style="margin-top:10px; font-weight:700;">Totalt värde: ${Math.round(totalA)}</div>
+      </div>
+      <div class="card" style="flex:1; min-width:260px;">
+        <select data-action="trade-set-team" data-side="B" style="width:100%; margin-bottom:10px;">${teamOptionsHtmlFor(league, tradeUIState.teamB)}</select>
+        ${rosterChecklist(rosterB, tradeUIState.selB, 'B')}
+        <div style="margin-top:10px; font-weight:700;">Totalt värde: ${Math.round(totalB)}</div>
+      </div>
+    </div>
+    <div class="card">
+      <p style="font-size:15px; font-weight:700; margin:0;">${verdict}</p>
+    </div>
+  `;
+}
+
 function renderPowerRankPage(){
   const el = document.getElementById('page-POWERRANK');
   if(!el) return;
@@ -5159,6 +5258,32 @@ document.addEventListener('input', (e) => {
 });
 
 document.addEventListener('change', (e) => {
+  const tradeLeagueSelect = e.target.closest('[data-action="trade-set-league"]');
+  if(tradeLeagueSelect){
+    tradeUIState.league = tradeLeagueSelect.value;
+    tradeUIState.teamA = 0; tradeUIState.teamB = 1;
+    tradeUIState.selA = new Set(); tradeUIState.selB = new Set();
+    renderTradePage(); return;
+  }
+
+  const tradeTeamSelect = e.target.closest('[data-action="trade-set-team"]');
+  if(tradeTeamSelect){
+    const side = tradeTeamSelect.dataset.side;
+    const idx = parseInt(tradeTeamSelect.value, 10);
+    if(side === 'A'){ tradeUIState.teamA = idx; tradeUIState.selA = new Set(); }
+    else { tradeUIState.teamB = idx; tradeUIState.selB = new Set(); }
+    renderTradePage(); return;
+  }
+
+  const tradePlayerCheck = e.target.closest('[data-action="trade-toggle-player"]');
+  if(tradePlayerCheck){
+    const side = tradePlayerCheck.dataset.side;
+    const label = tradePlayerCheck.dataset.label;
+    const set = side === 'A' ? tradeUIState.selA : tradeUIState.selB;
+    if(tradePlayerCheck.checked) set.add(label); else set.delete(label);
+    renderTradePage(); return;
+  }
+
   const waiverInput = e.target.closest('[data-action="waiver-search"]');
   if(waiverInput){ waiverSearch[waiverInput.dataset.league] = waiverInput.value; renderWeeklyPage(); return; }
 
