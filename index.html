@@ -3448,13 +3448,13 @@ async function showPlayerInfoPopup(label){
   const espnUrl = sleeperInfo && sleeperInfo.espn_id
     ? `https://www.espn.com/nfl/player/_/id/${sleeperInfo.espn_id}/${espnSlug}`
     : `https://www.google.com/search?q=${encodeURIComponent('site:espn.com/nfl/player ' + (p.full || p.name))}`;
-  const espnLinkLabel = sleeperInfo && sleeperInfo.espn_id ? '↗ Öppna på ESPN' : '↗ Sök på ESPN (inget ID hittat)';
+  const espnLinkLabel = sleeperInfo && sleeperInfo.espn_id ? 'Öppna på ESPN' : 'Sök på ESPN (inget ID hittat)';
 
   body.innerHTML = `
     ${photoUrl ? `<img src="${escapeAttr(photoUrl)}" alt="" style="width:64px; height:64px; border-radius:8px; object-fit:cover; float:right; border:1px solid var(--line); background:var(--panel-2);" onerror="this.style.display='none';">` : ''}
     <p class="turn-popup-sub">${escapeHtml(p.pos)} · ${escapeHtml(currentTeam)}${p.rank ? ' · Rank #' + p.rank : ''}${p.adp ? ' · ADP ' + escapeHtml(p.adp) : ''}</p>
     <h3 style="margin:4px 0 10px;">${escapeHtml(p.full || p.name)}</h3>
-    ${espnUrl ? `<p style="margin:0 0 10px;"><a href="${escapeAttr(espnUrl)}" target="_blank" rel="noopener" id="espn-link" style="color:var(--silver); font-size:12px;">${espnLinkLabel}</a></p>` : ''}
+    ${espnUrl ? `<p style="margin:0 0 10px;"><a href="${escapeAttr(espnUrl)}" target="_blank" rel="noopener" id="espn-link" style="color:var(--silver); font-size:12px; font-family:'Inter',sans-serif; font-weight:400;">${EXTERNAL_LINK_ICON_SVG} ${espnLinkLabel}</a></p>` : ''}
     <div id="espn-analysis"></div>
     ${rowsHtml || '<p style="font-size:13px; color:var(--chalk-dim);">Ingen extra Sleeper-info hittad för den här spelaren.</p>'}
     ${statsHtml}
@@ -3474,7 +3474,7 @@ async function showPlayerInfoPopup(label){
       const link = document.getElementById('espn-link');
       if(link){
         link.href = `https://www.espn.com/nfl/player/_/id/${foundId}/${espnSlug}`;
-        link.textContent = '↗ Öppna på ESPN';
+        link.innerHTML = EXTERNAL_LINK_ICON_SVG + ' Öppna på ESPN';
       }
       fetchEspnAnalysis(foundId).then(showEspnAnalysis);
     });
@@ -3489,7 +3489,7 @@ function showEspnAnalysis(result){
     <div style="margin:0 0 12px; padding:10px 12px; background:var(--panel-2); border-radius:8px; border:1px solid var(--line);">
       <div class="lineup-slot-label" style="margin-bottom:4px;">ANALYS (ESPN/RotoWire)</div>
       <p style="margin:0 0 ${result.link ? '6px' : '0'}; font-size:13px; color:var(--chalk-dim); line-height:1.5; font-weight:400; font-family:'Inter',sans-serif;">${escapeHtml(result.text)}</p>
-      ${result.link ? `<a href="${escapeAttr(result.link)}" target="_blank" rel="noopener" style="color:var(--silver); font-size:12px;">↗ Läs hela artikeln</a>` : ''}
+      ${result.link ? `<a href="${escapeAttr(result.link)}" target="_blank" rel="noopener" style="color:var(--silver); font-size:12px; font-family:'Inter',sans-serif; font-weight:400;">${EXTERNAL_LINK_ICON_SVG} Läs hela artikeln</a>` : ''}
     </div>
   `;
 }
@@ -3731,6 +3731,7 @@ function buildStartingLineup(rosterSlots, roster){
 }
 
 const NEWS_ICON_SVG = '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1px;"><path d="M4 4h13a2 2 0 0 1 2 2v13a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/><path d="M19 8v11a2 2 0 0 1-2 2H6"/><path d="M8 8h7M8 12h7M8 16h4"/></svg>';
+const EXTERNAL_LINK_ICON_SVG = '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1px;"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><path d="M15 3h6v6"/><path d="M10 14 21 3"/></svg>';
 
 let injuryDataReady = false;
 async function prefetchInjuryData(){
