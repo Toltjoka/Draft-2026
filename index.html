@@ -742,6 +742,7 @@
       <button class="nav-btn" id="nav-legacy2025" data-action="switch-page" data-page="LEGACY2025">2025</button>
       <button class="nav-btn admin-only-view" data-action="switch-page" data-page="WEEKLY">🏈 Start of the Week</button>
       <button class="nav-btn" data-action="switch-page" data-page="MOCK">🎯 Mock Draft</button>
+      <button class="nav-btn" data-action="switch-page" data-page="TRENDING">🔥 Trending</button>
     </div>
   </div>
 
@@ -761,6 +762,7 @@
   <section class="page" data-page="LEGACY2025" id="page-LEGACY2025"></section>
   <section class="page admin-only-view" data-page="WEEKLY" id="page-WEEKLY"></section>
   <section class="page" data-page="MOCK" id="page-MOCK"></section>
+  <section class="page" data-page="TRENDING" id="page-TRENDING"></section>
   <datalist id="all-players-datalist"></datalist>
   <datalist id="mock-keeper-datalist"></datalist>
   <audio id="custom-sound-player" preload="auto"></audio>
@@ -3021,6 +3023,7 @@ function switchPage(page){
   if(page === 'LEGACY2025') renderLegacyPage();
   if(page === 'WEEKLY') { renderWeeklyPage(); autoLoadSleeperHubs(); }
   if(page === 'MOCK') renderMockPage();
+  if(page === 'TRENDING') renderTrendingPage();
   if(page === 'balla' || page === 'douche') scrollToCurrentPick(page);
 }
 
@@ -3414,7 +3417,10 @@ async function showPlayerInfoPopup(label){
     ${stats ? `<p class="desc" style="margin-top:8px;">2025: ${stats.snapPct} snaps</p>` : ''}
   `;
 
+  const photoUrl = sleeperInfo && sleeperInfo.player_id ? `https://sleepercdn.com/content/nfl/players/${sleeperInfo.player_id}.jpg` : '';
+
   body.innerHTML = `
+    ${photoUrl ? `<img src="${escapeAttr(photoUrl)}" alt="" style="width:64px; height:64px; border-radius:8px; object-fit:cover; float:right; border:1px solid var(--line); background:var(--panel-2);" onerror="this.style.display='none';">` : ''}
     <p class="turn-popup-sub">${escapeHtml(p.pos)} · ${escapeHtml(currentTeam)}${p.rank ? ' · Rank #' + p.rank : ''}${p.adp ? ' · ADP ' + escapeHtml(p.adp) : ''}</p>
     <h3 style="margin:4px 0 10px;">${escapeHtml(p.full || p.name)}</h3>
     ${rowsHtml || '<p class="desc">Ingen extra Sleeper-info hittad för den här spelaren.</p>'}
@@ -3720,6 +3726,65 @@ function renderMyTeamPage(){
   }).join('');
 
   el.innerHTML = `${switcherHtml}<div class="myteam-wrap">${sections}</div>`;
+}
+
+let trendingCache = null; // {add: [...], drop: [...], fetchedAt}
+async function renderTrendingPage(){
+  const el = document.getElementById('page-TRENDING');
+  if(!el) return;
+
+  if(!trendingCache){
+    el.innerHTML = `<div class="card"><h2>🔥 Trending</h2><p class="desc">Läser trending-data från Sleeper…</p></div>`;
+    try{
+      const [addRes, dropRes, playersMap] = await Promise.all([
+        fetch('https://api.sleeper.app/v1/players/nfl/trending/add?lookback_hours=24&limit=30').then(r => r.json()),
+        fetch('https://api.sleeper.app/v1/players/nfl/trending/drop?lookback_hours=24&limit=30').then(r => r.json()),
+        sleeperFetchPlayersMap(),
+      ]);
+      if(!sleeperNameIndex) buildSleeperNameIndex(playersMap);
+      const enrich = (list) => list.map(item => {
+        const sp = playersMap[item.player_id];
+        if(!sp) return null;
+        const pos = sp.position === 'DEF' ? 'DST' : sp.position;
+        const fullName = (sp.first_name ? sp.first_name + ' ' : '') + sp.last_name;
+        return { count: item.count, name: fullName, pos, team: sp.team || '—', player_id: item.player_id, injury_status: sp.injury_status, injury_body_part: sp.injury_body_part };
+      }).filter(Boolean);
+      trendingCache = { add: enrich(addRes), drop: enrich(dropRes), fetchedAt: new Date() };
+    }catch(e){
+      el.innerHTML = `<div class="card"><h2>🔥 Trending</h2><p class="desc">Kunde inte hämta trending-data just nu. Kolla internetanslutningen och försök igen.</p></div>`;
+      return;
+    }
+  }
+
+  const rowHtml = (item, icon) => `
+    <div class="allteams-pick" style="display:flex; justify-content:space-between; align-items:center;">
+      <span>
+        <span class="pos-badge ${posClass(item.pos)}">${escapeHtml(item.pos)}</span>
+        ${escapeHtml(item.name)} <span class="adp-td-team">${escapeHtml(item.team)}</span>
+        ${item.injury_status ? `<span class="injury-badge" title="${escapeAttr(item.injury_status + (item.injury_body_part ? ' (' + item.injury_body_part + ')' : ''))}">⚠</span>` : ''}
+      </span>
+      <span style="font-family:'IBM Plex Mono',monospace; font-size:12px; color:var(--chalk-dim);">${icon} ${item.count.toLocaleString('sv-SE')}</span>
+    </div>
+  `;
+
+  el.innerHTML = `
+    <div class="card">
+      <h2>🔥 Trending — senaste 24h</h2>
+      <p class="desc">Vilka spelare plockas upp och släpps mest just nu, över hela Sleeper-plattformen (miljontals ligor). Bra sätt att se vad "alla" pratar om.
+        <button class="btn" style="margin-left:8px; font-size:11px; padding:3px 8px;" data-action="refresh-trending">🔄 Uppdatera</button>
+      </p>
+      <div class="allteams-grid">
+        <div class="allteams-team">
+          <div class="allteams-team-name">📈 Mest tillagda</div>
+          <div class="allteams-picks">${trendingCache.add.slice(0, 20).map(item => rowHtml(item, '+')).join('') || '<div class="allteams-pick empty">Ingen data</div>'}</div>
+        </div>
+        <div class="allteams-team">
+          <div class="allteams-team-name">📉 Mest släppta</div>
+          <div class="allteams-picks">${trendingCache.drop.slice(0, 20).map(item => rowHtml(item, '−')).join('') || '<div class="allteams-pick empty">Ingen data</div>'}</div>
+        </div>
+      </div>
+    </div>
+  `;
 }
 
 function renderAllTeamsPage(){
@@ -4269,6 +4334,9 @@ document.addEventListener('click', (e) => {
 
   const refreshBtn = e.target.closest('[data-action="refresh-app"]');
   if(refreshBtn){ window.location.reload(); return; }
+
+  const refreshTrendingBtn = e.target.closest('[data-action="refresh-trending"]');
+  if(refreshTrendingBtn){ trendingCache = null; renderTrendingPage(); return; }
 
   const importBtn = e.target.closest('[data-action="import-backup"]');
   if(importBtn){
