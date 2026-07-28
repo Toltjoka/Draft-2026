@@ -198,8 +198,13 @@
   #boot-error strong{display:block; margin-bottom:6px; font-size:13px;}
 
   /* Top-level nav: leagues + ranking pages, all in one tab row */
-  .nav{display:flex; gap:8px; justify-content:center; margin-bottom:22px; flex-wrap:wrap;}
+  .nav{display:flex; gap:8px; justify-content:center; margin-bottom:22px; flex-wrap:wrap; align-items:flex-end;}
   .nav-group{display:flex; gap:6px; padding:4px; background:var(--black-panel); border:1px solid var(--line); border-radius:999px;}
+  .nav-section{display:flex; flex-direction:column; gap:4px; align-items:center;}
+  .nav-section-label{
+    font-family:'IBM Plex Mono',monospace; font-size:9.5px; letter-spacing:.12em; color:var(--chalk-dim);
+    font-weight:600;
+  }
   .nav-btn{
     font-family:'Bebas Neue',sans-serif; font-size:17px; letter-spacing:.03em; padding:8px 18px;
     border-radius:999px; border:1px solid transparent; background:transparent; color:var(--chalk-dim); cursor:pointer;
@@ -740,10 +745,15 @@
       <button class="nav-btn" data-action="switch-page" data-page="ALLTEAMS">Alla lag</button>
       <button class="nav-btn" data-action="switch-page" data-page="RULES">Regler</button>
       <button class="nav-btn" id="nav-legacy2025" data-action="switch-page" data-page="LEGACY2025">2025</button>
-      <button class="nav-btn admin-only-view" data-action="switch-page" data-page="WEEKLY">🏈 Start of the Week</button>
       <button class="nav-btn" data-action="switch-page" data-page="MOCK">🎯 Mock Draft</button>
-      <button class="nav-btn" data-action="switch-page" data-page="TRENDING">🔥 Trending</button>
-      <button class="nav-btn admin-only-view" data-action="switch-page" data-page="THISWEEK">📅 Denna vecka</button>
+    </div>
+    <div class="nav-section">
+      <div class="nav-section-label">IN SEASON</div>
+      <div class="nav-group">
+        <button class="nav-btn admin-only-view" data-action="switch-page" data-page="WEEKLY">🏈 Start of the Week</button>
+        <button class="nav-btn" data-action="switch-page" data-page="TRENDING">🔥 Trending</button>
+        <button class="nav-btn admin-only-view" data-action="switch-page" data-page="THISWEEK">📅 Denna vecka</button>
+      </div>
     </div>
   </div>
 
