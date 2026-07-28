@@ -3440,7 +3440,7 @@ async function showPlayerInfoPopup(label){
       <tbody>${seasonRows}</tbody>
     </table>
     </div>
-    ${stats ? `<p class="desc" style="margin-top:8px;">2025: ${stats.snapPct} snaps</p>` : ''}
+    ${stats ? `<p style="margin-top:8px; font-size:13px; color:var(--chalk-dim);">2025: ${stats.snapPct} snaps</p>` : ''}
   `;
 
   const photoUrl = sleeperInfo && sleeperInfo.player_id ? `https://sleepercdn.com/content/nfl/players/${sleeperInfo.player_id}.jpg` : '';
@@ -3456,7 +3456,7 @@ async function showPlayerInfoPopup(label){
     <h3 style="margin:4px 0 10px;">${escapeHtml(p.full || p.name)}</h3>
     ${espnUrl ? `<p style="margin:0 0 10px;"><a href="${escapeAttr(espnUrl)}" target="_blank" rel="noopener" id="espn-link" style="color:var(--silver); font-size:12px;">${espnLinkLabel}</a></p>` : ''}
     <div id="espn-analysis"></div>
-    ${rowsHtml || '<p class="desc">Ingen extra Sleeper-info hittad för den här spelaren.</p>'}
+    ${rowsHtml || '<p style="font-size:13px; color:var(--chalk-dim);">Ingen extra Sleeper-info hittad för den här spelaren.</p>'}
     ${statsHtml}
   `;
 
@@ -3488,7 +3488,7 @@ function showEspnAnalysis(result){
   box.innerHTML = `
     <div style="margin:0 0 12px; padding:10px 12px; background:var(--panel-2); border-radius:8px; border:1px solid var(--line);">
       <div class="lineup-slot-label" style="margin-bottom:4px;">ANALYS (ESPN/RotoWire)</div>
-      <p class="desc" style="margin:0 0 ${result.link ? '6px' : '0'};">${escapeHtml(result.text)}</p>
+      <p style="margin:0 0 ${result.link ? '6px' : '0'}; font-size:13px; color:var(--chalk-dim); line-height:1.5; font-weight:400; font-family:'Inter',sans-serif;">${escapeHtml(result.text)}</p>
       ${result.link ? `<a href="${escapeAttr(result.link)}" target="_blank" rel="noopener" style="color:var(--silver); font-size:12px;">↗ Läs hela artikeln</a>` : ''}
     </div>
   `;
