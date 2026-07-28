@@ -753,6 +753,7 @@
         <button class="nav-btn admin-only-view" data-action="switch-page" data-page="WEEKLY">🏈 Start of the Week</button>
         <button class="nav-btn" data-action="switch-page" data-page="TRENDING">🔥 Trending</button>
         <button class="nav-btn admin-only-view" data-action="switch-page" data-page="THISWEEK">📅 Denna vecka</button>
+        <button class="nav-btn" data-action="switch-page" data-page="POWERRANK">📊 Power Rankings</button>
       </div>
     </div>
   </div>
@@ -775,6 +776,7 @@
   <section class="page" data-page="MOCK" id="page-MOCK"></section>
   <section class="page" data-page="TRENDING" id="page-TRENDING"></section>
   <section class="page admin-only-view" data-page="THISWEEK" id="page-THISWEEK"></section>
+  <section class="page" data-page="POWERRANK" id="page-POWERRANK"></section>
   <datalist id="all-players-datalist"></datalist>
   <datalist id="mock-keeper-datalist"></datalist>
   <audio id="custom-sound-player" preload="auto"></audio>
@@ -3063,6 +3065,7 @@ function switchPage(page){
   if(page === 'MOCK') renderMockPage();
   if(page === 'TRENDING') renderTrendingPage();
   if(page === 'THISWEEK') renderThisWeekPage();
+  if(page === 'POWERRANK') renderPowerRankPage();
   if(page === 'balla' || page === 'douche') scrollToCurrentPick(page);
 }
 
@@ -3686,6 +3689,29 @@ function renderRankingPage(cat){
   `;
 }
 
+// ADP-var ar i "runda.pick"-notation (standard 12-lagsformat, t.ex. "2.12" = runda 2 pick 12),
+// INTE ett rakt flyttal. Konverterar till ett jamforbart "overall pick"-nummer.
+function adpToOverallPick(adpStr){
+  if(!adpStr || adpStr === '-') return null;
+  const str = String(adpStr).trim();
+  const parts = str.split('.');
+  if(parts.length !== 2) return null;
+  const round = parseInt(parts[0]);
+  const pick = parseInt(parts[1]);
+  if(isNaN(round) || isNaN(pick)) return null;
+  return (round - 1) * 12 + pick;
+}
+
+// ADP-skalan antar 12-lagsformat. For att jamfora ratt behover vi skala om
+// en faktisk pick fran en 8-lagsliga (Douchebag) till motsvarande "plats" i en 12-lagsrunda.
+function leaguePickToAdpScale(overallPick, teamCount){
+  if(teamCount === 12) return overallPick;
+  const round = Math.ceil(overallPick / teamCount);
+  const posInRound = overallPick - (round - 1) * teamCount;
+  const posIn12 = Math.max(1, Math.round((posInRound / teamCount) * 12));
+  return (round - 1) * 12 + posIn12;
+}
+
 function parsePlayerLabel(label){
   if(!label) return null;
   const m = label.match(/^(.*) \(([A-Z]+)-([A-Z]+)\)$/);
@@ -4128,6 +4154,84 @@ async function renderTrendingPage(){
         </div>
       </div>
     </div>
+  `;
+}
+
+function overallPickNumberForSlot(leagueKey, round, teamIdx0){
+  const league = LEAGUES[leagueKey];
+  const n = league.n;
+  for(let idx = 0; idx < n; idx++){
+    if(league.order(round, idx, n) === teamIdx0 + 1){
+      return (round - 1) * n + idx + 1;
+    }
+  }
+  return null;
+}
+
+function computeDraftValueRankings(leagueKey){
+  const data = state[leagueKey];
+  if(!data || !data.slots) return [];
+  const n = LEAGUES[leagueKey].n;
+  if(!PLAYERS_INDEX) buildPlayersIndex();
+  const teamValues = data.slots.map((name, i) => ({ name, i, totalValue: 0, pickCount: 0, bestPick: null, worstPick: null }));
+
+  Object.keys(data.picks || {}).forEach(pickKey => {
+    const label = data.picks[pickKey];
+    if(!label) return;
+    const [roundStr, idxStr] = pickKey.split('-');
+    const round = parseInt(roundStr), teamIdx0 = parseInt(idxStr);
+    if(isNaN(round) || isNaN(teamIdx0)) return;
+    const overallPick = overallPickNumberForSlot(leagueKey, round, teamIdx0);
+    if(overallPick === null) return;
+    const scaledPick = leaguePickToAdpScale(overallPick, n);
+
+    const parsed = parsePlayerLabel(label);
+    const p = PLAYERS_FALLBACK.get(`${parsed.pos}|${normPlayerName(parsed.name)}`);
+    const adpOverall = p && adpToOverallPick(p.adp);
+    if(!adpOverall) return;
+
+    const value = scaledPick - adpOverall; // positivt = draftad senare an ADP (bra varde/steal), negativt = reach
+    const t = teamValues[teamIdx0];
+    t.totalValue += value;
+    t.pickCount += 1;
+    if(!t.bestPick || value > t.bestPick.value) t.bestPick = { name: parsed.name, value };
+    if(!t.worstPick || value < t.worstPick.value) t.worstPick = { name: parsed.name, value };
+  });
+
+  return teamValues.filter(t => t.pickCount > 0).sort((a,b) => b.totalValue - a.totalValue);
+}
+
+function renderPowerRankPage(){
+  const el = document.getElementById('page-POWERRANK');
+  if(!el) return;
+
+  const renderLeagueBlock = (key) => {
+    const rankings = computeDraftValueRankings(key);
+    if(!rankings.length){
+      return `<div class="card"><h2>${escapeHtml(LEAGUES[key].name)}</h2><p class="desc">Ingen draftdata än.</p></div>`;
+    }
+    const rowsHtml = rankings.map((t, i) => `
+      <div class="allteams-pick" style="display:flex; justify-content:space-between; align-items:center;">
+        <span><strong>#${i+1}</strong> ${escapeHtml(t.name)}</span>
+        <span style="font-family:'IBM Plex Mono',monospace; font-size:12px; color:${t.totalValue >= 0 ? 'var(--pos-rb)' : 'var(--pos-dst)'};">${t.totalValue >= 0 ? '+' : ''}${t.totalValue.toFixed(1)} värde</span>
+      </div>
+      ${t.bestPick ? `<div style="font-size:11px; color:var(--chalk-dim); padding:0 4px 6px;">Bästa pick: ${escapeHtml(t.bestPick.name)} (+${t.bestPick.value.toFixed(0)}) · Sämsta: ${escapeHtml(t.worstPick.name)} (${t.worstPick.value.toFixed(0)})</div>` : ''}
+    `).join('');
+    return `
+      <div class="card" style="margin-bottom:14px;">
+        <h2>${escapeHtml(LEAGUES[key].name)}</h2>
+        ${rowsHtml}
+      </div>
+    `;
+  };
+
+  el.innerHTML = `
+    <div class="card">
+      <h2>📊 Power Rankings — Draftvärde</h2>
+      <p class="desc">Rangordning baserad på hur bra värde varje lag fick i draften: spelare som draftades senare än sin ADP ger plus, spelare som "reachades" (togs tidigare än ADP) ger minus. Uppdateras automatiskt när nya val görs.</p>
+    </div>
+    ${renderLeagueBlock('douche')}
+    ${renderLeagueBlock('balla')}
   `;
 }
 
