@@ -3455,20 +3455,62 @@ async function showPlayerInfoPopup(label){
     <p class="turn-popup-sub">${escapeHtml(p.pos)} · ${escapeHtml(currentTeam)}${p.rank ? ' · Rank #' + p.rank : ''}${p.adp ? ' · ADP ' + escapeHtml(p.adp) : ''}</p>
     <h3 style="margin:4px 0 10px;">${escapeHtml(p.full || p.name)}</h3>
     ${espnUrl ? `<p style="margin:0 0 10px;"><a href="${escapeAttr(espnUrl)}" target="_blank" rel="noopener" id="espn-link" style="color:var(--silver); font-size:12px;">${espnLinkLabel}</a></p>` : ''}
+    <div id="espn-analysis"></div>
     ${rowsHtml || '<p class="desc">Ingen extra Sleeper-info hittad för den här spelaren.</p>'}
     ${statsHtml}
   `;
 
-  // Om Sleeper saknade ID: forsok hitta ratt ESPN-sida direkt via ESPNs eget sok-API (progressiv forbattring - uppdaterar lanken i efterhand om det lyckas, annars ligger Google-sokningen kvar)
-  if(!sleeperInfo || !sleeperInfo.espn_id){
+  // Hamta ESPN/RotoWire-analystext - anvander espn_id direkt om Sleeper har det,
+  // annars vantar vi in samma tryFindEspnId-sokning som uppgraderar lanken nedan.
+  const espnIdNow = sleeperInfo && sleeperInfo.espn_id;
+  if(espnIdNow){
+    fetchEspnAnalysis(espnIdNow).then(showEspnAnalysis);
+  }
+
+  // Om Sleeper saknade ID: forsok hitta ratt ESPN-sida direkt via ESPNs eget sok-API (progressiv forbattring - uppdaterar bade lanken och analystexten i efterhand om det lyckas)
+  if(!espnIdNow){
     tryFindEspnId(p.full || p.name).then(foundId => {
       if(!foundId) return;
       const link = document.getElementById('espn-link');
-      if(!link) return;
-      link.href = `https://www.espn.com/nfl/player/_/id/${foundId}/${espnSlug}`;
-      link.textContent = '↗ Öppna på ESPN';
+      if(link){
+        link.href = `https://www.espn.com/nfl/player/_/id/${foundId}/${espnSlug}`;
+        link.textContent = '↗ Öppna på ESPN';
+      }
+      fetchEspnAnalysis(foundId).then(showEspnAnalysis);
     });
   }
+}
+
+function showEspnAnalysis(text){
+  if(!text) return;
+  const box = document.getElementById('espn-analysis');
+  if(!box) return;
+  box.innerHTML = `
+    <div style="margin:0 0 12px; padding:10px 12px; background:var(--panel-2); border-radius:8px; border:1px solid var(--line);">
+      <div class="lineup-slot-label" style="margin-bottom:4px;">ANALYS (ESPN/RotoWire)</div>
+      <p class="desc" style="margin:0;">${escapeHtml(text)}</p>
+    </div>
+  `;
+}
+
+async function fetchEspnAnalysis(espnId){
+  try{
+    const res = await fetch(`https://site.web.api.espn.com/apis/common/v3/sports/football/nfl/athletes/${espnId}/overview`);
+    if(!res.ok) return null;
+    const data = await res.json();
+    // Sok defensivt genom mojliga faltnamn - vet inte exakt schema utan att ha testat live
+    const candidates = [
+      data.news, data.playerNews, data.athlete && data.athlete.news,
+      data.newsFeed, data.headlines
+    ].filter(Array.isArray);
+    for(const arr of candidates){
+      for(const item of arr){
+        const text = (item && (item.text || item.description || item.headline || item.summary)) || '';
+        if(text && text.length > 30) return text;
+      }
+    }
+  }catch(e){ /* CORS eller natverksfel - visa helt enkelt ingen analystext */ }
+  return null;
 }
 
 async function tryFindEspnId(name){
