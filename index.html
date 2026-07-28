@@ -485,6 +485,9 @@
     font-family:'IBM Plex Mono',monospace; font-size:8.5px; letter-spacing:.03em;
     background:var(--silver); color:#0b0c0d; border-radius:4px; padding:1px 4px; margin-left:4px;
   }
+  .injury-badge{
+    color:var(--pos-dst); font-size:11px; margin-left:3px; cursor:help; font-weight:700;
+  }
 
   /* Ranking pages */
   .adp-sources-panel{margin:10px 0 14px; padding:10px 12px; background:var(--panel-2); border:1px solid var(--line); border-radius:8px;}
@@ -2493,7 +2496,7 @@ function renderMockPage(){
     const isMe = teamIdx === md.myIdx;
     const roster = mockTeamRosterLabels(teamIdx).map(label => ({ label, parsed: parsePlayerLabel(label) }));
     const picksHtml = roster.length ? roster.map(p => `
-      <div class="allteams-pick">${escapeHtml(p.parsed.name)} <span class="allteams-pos pos-badge ${posClass(p.parsed.pos)}">${escapeHtml(p.parsed.pos)}</span></div>
+      <div class="allteams-pick">${escapeHtml(p.parsed.name)} <span class="allteams-pos pos-badge ${posClass(p.parsed.pos)}">${escapeHtml(p.parsed.pos)}</span>${injuryBadge(p.parsed)}</div>
     `).join('') : '<div class="allteams-pick empty">Inga val än</div>';
     return `
       <div class="allteams-team${isMe?' is-me':''}">
@@ -2611,7 +2614,7 @@ function renderWeeklyPage(){
             <div class="lineup-slot-label">${escapeHtml(slot.label)}</div>
             <div style="display:flex; align-items:center; gap:8px;">
               <div style="flex:1; min-width:0;">
-                <div class="lineup-slot-player">${escapeHtml(p.label)}</div>
+                <div class="lineup-slot-player">${escapeHtml(p.label)}${injuryBadge(parsePlayerLabel(p.label))}</div>
                 <div class="lineup-slot-sub">${ptsText}</div>
               </div>
               <button class="swap-btn" data-action="open-weekly-swap-menu" data-league="${key}" data-label="${escapeAttr(p.label)}" title="Byt spelare"></button>
@@ -2643,7 +2646,7 @@ function renderWeeklyPage(){
             <div class="lineup-slot-label">BN</div>
             <div style="display:flex; align-items:center; gap:8px;">
               <div style="flex:1; min-width:0;">
-                <div class="lineup-slot-player">${escapeHtml(p.label)}</div>
+                <div class="lineup-slot-player">${escapeHtml(p.label)}${injuryBadge(parsePlayerLabel(p.label))}</div>
                 <div class="lineup-slot-sub">${ptsText}</div>
               </div>
               <button class="swap-btn" data-action="open-weekly-swap-menu" data-league="${key}" data-label="${escapeAttr(p.label)}" title="Byt spelare"></button>
@@ -3498,7 +3501,7 @@ function renderRankingPage(cat){
       <tr class="adp-row ${posClass(p.pos)}${isTaken?' taken':''}">
         <td class="adp-td-name">
           <span class="pos-badge ${posClass(p.pos)}">${escapeHtml(p.pos)}</span>
-          ${escapeHtml(p.name)} <span class="adp-td-team">${escapeHtml(p.team)}</span>${p.rookie?'<span class="rookie-badge">R</span>':''}
+          ${escapeHtml(p.name)} <span class="adp-td-team">${escapeHtml(p.team)}</span>${p.rookie?'<span class="rookie-badge">R</span>':''}${injuryBadge(p)}
           <button class="btn" style="padding:1px 6px; font-size:10px; margin-left:6px;" data-action="show-player-info" data-label="${escapeAttr(formatFullPlayerLabel(p))}" title="Spelarinfo">${NEWS_ICON_SVG}</button>
         </td>
         <td class="adp-td">${escapeHtml(p.adp)}</td>
@@ -3602,6 +3605,30 @@ function buildStartingLineup(rosterSlots, roster){
 
 const NEWS_ICON_SVG = '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1px;"><path d="M4 4h13a2 2 0 0 1 2 2v13a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/><path d="M19 8v11a2 2 0 0 1-2 2H6"/><path d="M8 8h7M8 12h7M8 16h4"/></svg>';
 
+let injuryDataReady = false;
+async function prefetchInjuryData(){
+  try{
+    const playersMap = await sleeperFetchPlayersMap();
+    if(!sleeperNameIndex) buildSleeperNameIndex(playersMap);
+    injuryDataReady = true;
+    // Rita om allt som visar spelarnamn sa skadeikonerna dyker upp overallt
+    if(state.douche) renderLeaguePage('douche');
+    if(state.balla) renderLeaguePage('balla');
+    Object.keys(RANK_PAGES).forEach(renderRankingPage);
+    if(typeof mockDraft !== 'undefined' && mockDraft && mockDraft.started) renderMockPage();
+  }catch(e){ /* Sleeper otillgangligt - inga skadeikoner, men appen kraschar inte */ }
+}
+
+function injuryBadge(p){
+  if(!injuryDataReady || !p) return '';
+  const sp = lookupSleeperPlayer(p);
+  if(sp && sp.injury_status){
+    const tip = sp.injury_status + (sp.injury_body_part ? ' (' + sp.injury_body_part + ')' : '');
+    return `<span class="injury-badge" title="${escapeAttr(tip)}">⚠</span>`;
+  }
+  return '';
+}
+
 function posClass(pos){
   return 'pos-' + (pos || '').toLowerCase();
 }
@@ -3640,7 +3667,7 @@ function renderMyTeamPage(){
           return `
             <div class="lineup-slot filled ${posClass(p.pos)}">
               <div class="lineup-slot-label">${escapeHtml(s.label)}</div>
-              <div class="lineup-slot-player">${escapeHtml(p.name)} <span class="pos-badge ${posClass(p.pos)}">${escapeHtml(p.pos)}</span> <span class="lineup-slot-team">${escapeHtml(p.team)}</span></div>
+              <div class="lineup-slot-player">${escapeHtml(p.name)} <span class="pos-badge ${posClass(p.pos)}">${escapeHtml(p.pos)}</span> <span class="lineup-slot-team">${escapeHtml(p.team)}</span>${injuryBadge(p)}</div>
             </div>
           `;
         }
@@ -3652,7 +3679,7 @@ function renderMyTeamPage(){
         `;
       }).join('');
       const benchHtml = bench.length ? bench.map(p => `
-        <div class="lineup-bench-item"><span class="pos-badge ${posClass(p.parsed.pos)}">${escapeHtml(p.parsed.pos)}</span> ${escapeHtml(p.parsed.name)} <span class="lineup-slot-team">${escapeHtml(p.parsed.team)}</span></div>
+        <div class="lineup-bench-item"><span class="pos-badge ${posClass(p.parsed.pos)}">${escapeHtml(p.parsed.pos)}</span> ${escapeHtml(p.parsed.name)} <span class="lineup-slot-team">${escapeHtml(p.parsed.team)}</span>${injuryBadge(p.parsed)}</div>
       `).join('') : '<div class="lineup-bench-item empty-slot">— inga bänkspelare än —</div>';
 
 
@@ -3673,7 +3700,7 @@ function renderMyTeamPage(){
         <div class="myteam-row${filled?'':' empty'}">
           <div class="myteam-round">R${p.round} <span class="myteam-overall">#${p.overallPick}</span></div>
           <div class="myteam-player">
-            ${filled ? `<span class="myteam-name">${escapeHtml(parsed.name)}</span> <span class="myteam-pos pos-badge ${posClass(parsed.pos)}">${escapeHtml(parsed.pos)}</span> <span class="myteam-team">${escapeHtml(parsed.team)}</span>` : '<span class="myteam-name empty-slot">— inte draftad än —</span>'}
+            ${filled ? `<span class="myteam-name">${escapeHtml(parsed.name)}</span> <span class="myteam-pos pos-badge ${posClass(parsed.pos)}">${escapeHtml(parsed.pos)}</span> <span class="myteam-team">${escapeHtml(parsed.team)}</span>${injuryBadge(parsed)}` : '<span class="myteam-name empty-slot">— inte draftad än —</span>'}
           </div>
         </div>
       `;
@@ -3713,7 +3740,7 @@ function renderAllTeamsPage(){
       const isMe = data.myTeamIdx === slotIdx;
       const picksHtml = roster.filter(p => p.label).map(p => {
         const parsed = parsePlayerLabel(p.label);
-        return `<div class="allteams-pick"><span class="allteams-round">R${p.round}</span> ${escapeHtml(parsed.name)} <span class="allteams-pos pos-badge ${posClass(parsed.pos)}">${escapeHtml(parsed.pos)}</span></div>`;
+        return `<div class="allteams-pick"><span class="allteams-round">R${p.round}</span> ${escapeHtml(parsed.name)} <span class="allteams-pos pos-badge ${posClass(parsed.pos)}">${escapeHtml(parsed.pos)}</span>${injuryBadge(parsed)}</div>`;
       }).join('') || '<div class="allteams-pick empty">Inga val än</div>';
       return `
         <div class="allteams-team${isMe?' is-me':''}">
@@ -4083,7 +4110,7 @@ function showSuggestions(input){
 
   box.innerHTML = (matches.length ? matches.map(p => `
     <div class="suggest-row ${posClass(p.pos)}" data-league="${key}" data-pick-key="${pickKey}" data-label="${escapeAttr(formatPlayerLabel(p))}">
-      <span><span class="pos-badge ${posClass(p.pos)}">${escapeHtml(p.pos)}</span> ${escapeHtml(p.name)}${p.rookie?' <span class="rookie-badge">R</span>':''}
+      <span><span class="pos-badge ${posClass(p.pos)}">${escapeHtml(p.pos)}</span> ${escapeHtml(p.name)}${p.rookie?' <span class="rookie-badge">R</span>':''}${injuryBadge(p)}
       <button class="btn" style="padding:0px 5px; font-size:9px; margin-left:4px;" data-action="show-player-info" data-label="${escapeAttr(formatFullPlayerLabel(p))}" title="Spelarinfo">${NEWS_ICON_SVG}</button></span>
       <span class="suggest-meta">${p.rank} · ${p.team} · ADP ${p.adp}</span>
     </div>
@@ -4116,7 +4143,7 @@ function showMockSuggestions(input){
 
   box.innerHTML = (matches.length ? matches.map(p => `
     <div class="suggest-row ${posClass(p.pos)}" data-mock-label="${escapeAttr(formatPlayerLabel(p))}">
-      <span><span class="pos-badge ${posClass(p.pos)}">${escapeHtml(p.pos)}</span> ${escapeHtml(p.full || p.name)}${p.rookie?' <span class="rookie-badge">R</span>':''}</span>
+      <span><span class="pos-badge ${posClass(p.pos)}">${escapeHtml(p.pos)}</span> ${escapeHtml(p.full || p.name)}${p.rookie?' <span class="rookie-badge">R</span>':''}${injuryBadge(p)}</span>
       <span class="suggest-meta">${p.rank} · ${p.team} · ADP ${p.adp}</span>
     </div>
   `).join('') : (rawQuery.length >= 2 ? '' : `<div class="suggest-empty">Inga träffar</div>`)) + freeTextRow;
@@ -4161,7 +4188,7 @@ function showWeeklySuggestions(input){
     const label = `${p.full || p.name} (${p.pos}-${p.team})`;
     return `
       <div class="suggest-row ${posClass(p.pos)}" data-weekly-league="${key}" data-weekly-label="${escapeAttr(label)}" data-weekly-pin="${escapeAttr(pinAttr)}">
-        <span><span class="pos-badge ${posClass(p.pos)}">${escapeHtml(p.pos)}</span> ${escapeHtml(p.full || p.name)}${p.rookie?' <span class="rookie-badge">R</span>':''}</span>
+        <span><span class="pos-badge ${posClass(p.pos)}">${escapeHtml(p.pos)}</span> ${escapeHtml(p.full || p.name)}${p.rookie?' <span class="rookie-badge">R</span>':''}${injuryBadge(p)}</span>
         <span class="suggest-meta">${p.team}</span>
       </div>
     `;
@@ -4862,6 +4889,7 @@ async function init(){
   renderLeaguePage('balla');
   Object.keys(RANK_PAGES).forEach(renderRankingPage);
   populatePlayerDatalist();
+  prefetchInjuryData(); // bakgrund - ritar om nar den ar klar
   // Spara direkt om migreringen av lagnamn (Lag N -> riktigt namn) ändrade något
   queueSave('douche');
   queueSave('balla');
