@@ -1013,6 +1013,82 @@ function buildStats2025Index(){
 }
 
 let COMBINE_INDEX = null;
+// ---- College-statistik for rookies (cfbfastR-data, gratis, CORS-vanligt - hamtas live) ----
+const cfbStatsCache = {}; // season -> Map(normaliserat namn -> aggregerad stats)
+async function fetchCollegeStats(season){
+  if(cfbStatsCache[season]) return cfbStatsCache[season];
+  const url = `https://raw.githubusercontent.com/sportsdataverse/cfbfastR-data/main/player_stats/csv/player_stats_${season}.csv`;
+  const res = await fetch(url);
+  if(!res.ok) throw new Error('Kunde inte hämta college-data för ' + season);
+  const text = await res.text();
+  const rows = parseCsvText(text);
+
+  const acc = new Map();
+  const getOrCreate = (name) => {
+    const key = normPlayerNameLoose(name);
+    if(!acc.has(key)) acc.set(key, {
+      name, games: new Set(),
+      rushYds: 0, rushTD: 0, rec: 0, recYds: 0, recTD: 0, paYds: 0, paTD: 0, paInt: 0,
+    });
+    return acc.get(key);
+  };
+
+  rows.forEach(row => {
+    const gameId = row.game_id;
+    if(row.rush_player){
+      const s = getOrCreate(row.rush_player);
+      s.rushYds += parseFloat(row.rush_yds) || 0;
+      s.games.add(gameId);
+    }
+    if(row.reception_player){
+      const s = getOrCreate(row.reception_player);
+      s.recYds += parseFloat(row.reception_yds) || 0;
+      s.rec += 1;
+      s.games.add(gameId);
+    }
+    if(row.completion_player){
+      const s = getOrCreate(row.completion_player);
+      s.paYds += parseFloat(row.completion_yds) || 0;
+      s.games.add(gameId);
+    }
+    if(row.interception_thrown_player){
+      getOrCreate(row.interception_thrown_player).paInt += 1;
+    }
+    if(row.touchdown_player){
+      const tdName = row.touchdown_player;
+      if(tdName === row.rush_player) getOrCreate(tdName).rushTD += 1;
+      else if(tdName === row.reception_player) getOrCreate(tdName).recTD += 1;
+      else if(tdName === row.completion_player) getOrCreate(tdName).paTD += 1;
+    }
+  });
+
+  const finalMap = new Map();
+  acc.forEach((s, key) => {
+    finalMap.set(key, { ...s, g: s.games.size });
+  });
+  cfbStatsCache[season] = finalMap;
+  return finalMap;
+}
+
+// cfbfastR anvander ofta "F. Last" eller fullstandigt namn olika - normalisera lite lost for battre traff
+function normPlayerNameLoose(name){
+  return (name || '').toLowerCase().replace(/[^a-z]/g, '');
+}
+
+async function findCollegeStatsForRookie(p){
+  if(!p.rookie) return null;
+  try{
+    const map = await fetchCollegeStats(2025);
+    const fullKey = normPlayerNameLoose(p.full || p.name);
+    if(map.has(fullKey)) return map.get(fullKey);
+    // Reserv: forkortad "F. Efternamn"-form, ifall cfbfastR anvander det formatet
+    const abbrevKey = normPlayerNameLoose(abbrevPlayerName(p.full || p.name));
+    return map.get(abbrevKey) || null;
+  }catch(e){
+    return null;
+  }
+}
+
 function findCombineData(p){
   if(!COMBINE_INDEX) COMBINE_INDEX = buildStatsIndexGeneric(PLAYER_COMBINE_DATA);
   const fullName = (p.full || p.name).toLowerCase();
@@ -3502,6 +3578,7 @@ async function showPlayerInfoPopup(label){
     <h3 style="margin:4px 0 10px;">${escapeHtml(p.full || p.name)}</h3>
     ${espnUrl ? `<p style="margin:0 0 10px;"><a href="${escapeAttr(espnUrl)}" target="_blank" rel="noopener" id="espn-link" style="color:var(--silver); font-size:12px; font-family:'Inter',sans-serif; font-weight:400;">${EXTERNAL_LINK_ICON_SVG} ${espnLinkLabel}</a></p>` : ''}
     <div id="espn-analysis"></div>
+    <div id="college-stats"></div>
     ${rowsHtml || '<p style="font-size:13px; color:var(--chalk-dim);">Ingen extra Sleeper-info hittad för den här spelaren.</p>'}
     ${combineHtml}
     ${statsHtml}
@@ -3526,6 +3603,26 @@ async function showPlayerInfoPopup(label){
       fetchEspnAnalysis(foundId).then(showEspnAnalysis);
     });
   }
+
+  if(p.rookie){
+    findCollegeStatsForRookie(p).then(showCollegeStats);
+  }
+}
+
+function showCollegeStats(s){
+  const box = document.getElementById('college-stats');
+  if(!box) return;
+  if(!s){ box.innerHTML = ''; return; }
+  box.innerHTML = `
+    <div style="margin:0 0 12px; padding:10px 12px; background:var(--panel-2); border-radius:8px; border:1px solid var(--line);">
+      <div class="lineup-slot-label" style="margin-bottom:4px;">COLLEGE 2025 (${s.g} matcher)</div>
+      <div class="bench-list">
+        ${s.rushYds ? `<span class="bench-chip">${Math.round(s.rushYds)} rush yds, ${s.rushTD} TD</span>` : ''}
+        ${s.rec ? `<span class="bench-chip">${s.rec} mål, ${Math.round(s.recYds)} yards, ${s.recTD} TD</span>` : ''}
+        ${s.paYds ? `<span class="bench-chip">${Math.round(s.paYds)} pass yards, ${s.paTD} TD, ${s.paInt} INT</span>` : ''}
+      </div>
+    </div>
+  `;
 }
 
 function showEspnAnalysis(result){
