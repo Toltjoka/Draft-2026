@@ -3604,9 +3604,11 @@ async function showPlayerInfoPopup(label){
     });
   }
 
-  if(p.rookie){
-    findCollegeStatsForRookie(p).then(showCollegeStats);
-  }
+  // TILLFALLIGT AVSTANGD: livehamtning av hela college-radata (213 000 rader) kraschade
+  // mobila webblasare (för minneskravande). Byggs om till inbakad data istallet.
+  // if(p.rookie){
+  //   findCollegeStatsForRookie(p).then(showCollegeStats);
+  // }
 }
 
 function showCollegeStats(s){
